@@ -4,8 +4,13 @@ HtmlParserAgent 主程序
 """
 import sys
 import argparse
+import warnings
 from loguru import logger
 from agent import ParserAgent
+
+# 过滤 LangSmith UUID v7 警告
+warnings.filterwarnings('ignore', message='.*LangSmith now uses UUID v7.*')
+warnings.filterwarnings('ignore', category=UserWarning, module='pydantic.v1.main')
 
 
 def setup_logger():

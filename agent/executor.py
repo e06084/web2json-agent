@@ -187,8 +187,10 @@ class AgentExecutor:
                 previous_parser_code=previous_parser_code,
                 parser_path=parser_path
             )
+            logger.success(f"  ✓ 解析代码已生成/优化")
 
-            # 保存当前轮的解析器代码
+            # 5. 保存解析器代码
+            logger.info(f"  [5/5] 保存解析器...")
             round_parser_path = self.parsers_dir / f"round_{round_num}.py"
             with open(round_parser_path, 'w', encoding='utf-8') as f:
                 f.write(parser_result['code'])
@@ -199,7 +201,7 @@ class AgentExecutor:
             result['parser_result'] = parser_result
             result['parser_result']['parser_path'] = str(round_parser_path)  # 更新路径
             result['success'] = True
-            logger.success(f"  ✓ 解析代码已生成/优化")
+
             logger.success(f"第 {round_num} 轮处理完成")
 
         except Exception as e:
