@@ -330,7 +330,8 @@ class AgentExecutor:
                     logger.success(f"  ✓ 解析代码已优化")
 
                 # 5. 保存解析器代码
-                code_parser_path = self.parsers_dir / f"code_round_{idx}.py"
+                parser_filename = f"parser_round_{idx}.py"
+                code_parser_path = self.parsers_dir / parser_filename
                 with open(code_parser_path, 'w', encoding='utf-8') as f:
                     f.write(parser_result['code'])
                 logger.success(f"  ✓ 解析器已保存: {code_parser_path}")
@@ -376,8 +377,14 @@ class AgentExecutor:
 
         # 设置最终解析器
         if current_parser_code:
+            # 保存最终解析器
+            final_parser_path = self.parsers_dir / "final_parser.py"
+            with open(final_parser_path, 'w', encoding='utf-8') as f:
+                f.write(current_parser_code)
+            logger.success(f"最终解析器已保存: {final_parser_path}")
+
             result['final_parser'] = {
-                'parser_path': current_parser_path,
+                'parser_path': str(final_parser_path),
                 'code': current_parser_code,
                 'config_path': None,  # 可以添加配置文件路径
                 'config': final_schema,
@@ -423,15 +430,15 @@ class AgentExecutor:
                 "output_dir": str(self.parsers_dir)
             })
 
-            # 保存解析器代码
-            parser_path = self.parsers_dir / "generated_parser.py"
-            with open(parser_path, 'w', encoding='utf-8') as f:
+            # 保存最终解析器
+            final_parser_path = self.parsers_dir / "final_parser.py"
+            with open(final_parser_path, 'w', encoding='utf-8') as f:
                 f.write(parser_result['code'])
-            logger.success(f"解析器已生成并保存: {parser_path}")
+            logger.success(f"最终解析器已生成并保存: {final_parser_path}")
 
             # 设置最终解析器
             result['final_parser'] = {
-                'parser_path': str(parser_path),
+                'parser_path': str(final_parser_path),
                 'code': parser_result['code'],
                 'config_path': None,
                 'config': final_schema,

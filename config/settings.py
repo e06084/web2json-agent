@@ -38,6 +38,10 @@ class Settings(BaseModel):
     vision_temperature: float = Field(default_factory=lambda: float(os.getenv("VISION_TEMPERATURE", "0")))
     vision_max_tokens: int = Field(default_factory=lambda: int(os.getenv("VISION_MAX_TOKENS", "4096")))
 
+    # 默认模型配置（用于向后兼容和通用场景）
+    default_model: str = Field(default_factory=lambda: os.getenv("DEFAULT_MODEL", "claude-sonnet-4-5-20250929"))
+    default_temperature: float = Field(default_factory=lambda: float(os.getenv("DEFAULT_TEMPERATURE", "0")))
+
     # ============================================
     # Agent 配置
     # ============================================
@@ -46,7 +50,7 @@ class Settings(BaseModel):
     min_sample_size: int = Field(default_factory=lambda: int(os.getenv("MIN_SAMPLE_SIZE", "2")))
 
     # Schema迭代阶段的URL数量
-    schema_iteration_url_count: int = Field(default_factory=lambda: int(os.getenv("SCHEMA_ITERATION_URL_COUNT", "3")))
+    schema_iteration_url_count: int = Field(default_factory=lambda: int(os.getenv("SCHEMA_ITERATION_URL_COUNT", "5")))
     # 代码迭代阶段的URL数量
     code_iteration_url_count: int = Field(default_factory=lambda: int(os.getenv("CODE_ITERATION_URL_COUNT", "2")))
 

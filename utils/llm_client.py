@@ -10,6 +10,7 @@ import tiktoken
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from loguru import logger
+from config.settings import settings
 
 # 加载项目根目录的 .env 文件
 project_root = Path(__file__).parent.parent
@@ -44,21 +45,21 @@ class LLMClient:
     # 单例字典，按 (model, api_base) 作为键
     _instances: Dict[tuple, "LLMClient"] = {}
 
-    def __new__(cls, api_key: Optional[str] = None, api_base: Optional[str] = None, 
+    def __new__(cls, api_key: Optional[str] = None, api_base: Optional[str] = None,
                 model: Optional[str] = None, temperature: float = 0.3):
         """使用单例模式，确保相同配置的客户端共享实例"""
-        # 获取实际的配置值
-        actual_api_base = api_base or os.getenv("OPENAI_API_BASE", "http://35.220.164.252:3888/v1")
-        actual_model = model or os.getenv("DEFAULT_MODEL", "claude-sonnet-4-5-20250929")
-        
+        # 获取实际的配置值（优先使用settings）
+        actual_api_base = api_base or settings.openai_api_base
+        actual_model = model or settings.default_model
+
         # 使用 (model, api_base) 作为键
         instance_key = (actual_model, actual_api_base)
-        
+
         if instance_key not in cls._instances:
             instance = super().__new__(cls)
             cls._instances[instance_key] = instance
             instance._initialized = False  # 标记是否已初始化
-        
+
         return cls._instances[instance_key]
 
     def __init__(
@@ -79,10 +80,10 @@ class LLMClient:
         # 避免重复初始化
         if self._initialized:
             return
-            
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.api_base = api_base or os.getenv("OPENAI_API_BASE", "http://35.220.164.252:3888/v1")
-        self.model = model or os.getenv("DEFAULT_MODEL", "claude-sonnet-4-5-20250929")
+
+        self.api_key = api_key or settings.openai_api_key
+        self.api_base = api_base or settings.openai_api_base
+        self.model = model or settings.default_model
         self.temperature = temperature
 
         # 初始化 tokenizer 用于本地 token 计数
@@ -143,26 +144,27 @@ class LLMClient:
             >>> # 视觉理解场景
             >>> llm = LLMClient.for_scenario("vision")
         """
-        api_key = os.getenv("OPENAI_API_KEY")
-        api_base = os.getenv("OPENAI_API_BASE", "http://35.220.164.252:3888/v1")
+        # 从 settings 获取配置
+        api_key = settings.openai_api_key
+        api_base = settings.openai_api_base
 
-        # 根据场景选择配置
+        # 根据场景选择配置（使用 settings）
         scenario_configs = {
             "default": {
-                "model": os.getenv("DEFAULT_MODEL", "claude-sonnet-4-5-20250929"),
-                "temperature": float(os.getenv("DEFAULT_TEMPERATURE", "0"))
+                "model": settings.default_model,
+                "temperature": settings.default_temperature
             },
             "code_gen": {
-                "model": os.getenv("CODE_GEN_MODEL", "claude-sonnet-4-5-20250929"),
-                "temperature": float(os.getenv("CODE_GEN_TEMPERATURE", "0.3"))
+                "model": settings.code_gen_model,
+                "temperature": settings.code_gen_temperature
             },
             "vision": {
-                "model": os.getenv("VISION_MODEL", "qwen-vl-max"),
-                "temperature": float(os.getenv("VISION_TEMPERATURE", "0"))
+                "model": settings.vision_model,
+                "temperature": settings.vision_temperature
             },
             "agent": {
-                "model": os.getenv("AGENT_MODEL", "claude-sonnet-4-5-20250929"),
-                "temperature": float(os.getenv("AGENT_TEMPERATURE", "0"))
+                "model": settings.agent_model,
+                "temperature": settings.agent_temperature
             }
         }
 

@@ -64,11 +64,7 @@ class VisualUnderstandingPrompts:
     "description": "文章正文内容（完整内容）",
     "visual_features": "位于页面中心主要内容区域，占据页面主体部分，字体为常规大小，颜色为深色，行距适中，通常以段落形式组织"
   },
-  "tags": {
-    "type": "array",
-    "description": "文章标签",
-    "visual_features": "通常位于标题附近或文章末尾，以小标签或按钮形式展示，可能有背景色或边框，多个标签横向排列"
-  }
+  // 其他字段
 }
 ```
 
@@ -87,6 +83,7 @@ class VisualUnderstandingPrompts:
 
 - visual_features 应该足够详细，让开发者能够根据描述在HTML中准确定位到该元素
 - 描述应该关注视觉特征而非具体的HTML标签或CSS类名
+- description 和 visual_features 中只描述通用特征，不要包含具体页面的实际内容
 - 如果某个字段在截图中不存在，可以不包含在输出中"""
 
     @staticmethod
