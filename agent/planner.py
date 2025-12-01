@@ -33,9 +33,9 @@ class AgentPlanner:
         if not domain and urls:
             domain = self._extract_domain(urls[0])
 
-        # 选择样本URL（最多3个，确保至少2个）
-        num_samples = max(min(len(urls), 3), min(len(urls), settings.min_sample_size))
-        sample_urls = urls[:num_samples]
+        # 使用所有输入的URL（不再限制样本数量）
+        sample_urls = urls
+        num_samples = len(urls)
 
         # 构建标准执行计划
         plan = {
@@ -49,20 +49,16 @@ class AgentPlanner:
                 'capture_screenshot',   # 2. 截图
                 'extract_schema',       # 3. 提取JSON Schema
                 'generate_code',        # 4. 生成解析代码
-                'validate_code',        # 5. 验证代码
             ],
-            'max_iterations': settings.max_iterations,
-            'success_threshold': settings.success_threshold,
         }
 
         logger.success(f"执行计划创建完成:")
         logger.info(f"  域名: {domain}")
         logger.info(f"  布局类型: {layout_type or '自动识别'}")
-        logger.info(f"  总URL数: {len(urls)}")
-        logger.info(f"  样本URL数: {num_samples}")
+        logger.info(f"  URL数量: {num_samples}")
+        logger.info(f"  Schema迭代: {num_samples}轮")
+        logger.info(f"  代码迭代: {num_samples}轮")
         logger.info(f"  执行步骤: {len(plan['steps'])} 个")
-        logger.info(f"  最大迭代次数: {plan['max_iterations']}")
-        logger.info(f"  成功率阈值: {plan['success_threshold']:.0%}")
 
         return plan
 

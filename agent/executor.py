@@ -67,25 +67,16 @@ class AgentExecutor:
             'success': False,
         }
 
-        # 获取配置的URL数量
-        schema_url_count = settings.schema_iteration_url_count
-        code_url_count = settings.code_iteration_url_count
+        # 使用所有输入的URL进行迭代
         sample_urls = plan['sample_urls']
+        num_urls = len(sample_urls)
 
-        # 验证URL数量足够
-        total_urls_needed = schema_url_count + code_url_count
-        if len(sample_urls) < total_urls_needed:
-            logger.warning(f"URL数量不足：需要{total_urls_needed}个，实际{len(sample_urls)}个")
-            schema_url_count = min(schema_url_count, len(sample_urls))
-            code_url_count = max(0, len(sample_urls) - schema_url_count)
-
-        # 阶段1: Schema迭代
+        # 阶段1: Schema迭代（使用所有URL）
         logger.info(f"\n{'='*70}")
-        logger.info(f"阶段1: Schema迭代（使用前 {schema_url_count} 个URL）")
+        logger.info(f"阶段1: Schema迭代（{num_urls}个URL，{num_urls}轮迭代）")
         logger.info(f"{'='*70}")
 
-        schema_urls = sample_urls[:schema_url_count]
-        schema_result = self._execute_schema_iteration_phase(schema_urls)
+        schema_result = self._execute_schema_iteration_phase(sample_urls)
         results['schema_phase'] = schema_result
 
         if not schema_result['success']:
@@ -95,14 +86,13 @@ class AgentExecutor:
         final_schema = schema_result['final_schema']
         logger.success(f"Schema迭代完成，最终Schema包含 {len(final_schema)} 个字段")
 
-        # 阶段2: 代码迭代
+        # 阶段2: 代码迭代（使用所有URL）
         logger.info(f"\n{'='*70}")
-        logger.info(f"阶段2: 代码迭代（使用后 {code_url_count} 个URL）")
+        logger.info(f"阶段2: 代码迭代（{num_urls}个URL，{num_urls}轮迭代）")
         logger.info(f"{'='*70}")
 
-        code_urls = sample_urls[schema_url_count:schema_url_count + code_url_count]
         code_result = self._execute_code_iteration_phase(
-            code_urls,
+            sample_urls,  # 使用所有URL
             final_schema,
             schema_result['rounds']  # 传递schema阶段的数据用于后续验证
         )

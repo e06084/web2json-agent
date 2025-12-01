@@ -45,14 +45,7 @@ class Settings(BaseModel):
     # ============================================
     # Agent 配置
     # ============================================
-    max_iterations: int = Field(default_factory=lambda: int(os.getenv("MAX_ITERATIONS", "5")))
-    success_threshold: float = Field(default_factory=lambda: float(os.getenv("SUCCESS_THRESHOLD", "0.8")))
-    min_sample_size: int = Field(default_factory=lambda: int(os.getenv("MIN_SAMPLE_SIZE", "2")))
-
-    # Schema迭代阶段的URL数量
-    schema_iteration_url_count: int = Field(default_factory=lambda: int(os.getenv("SCHEMA_ITERATION_URL_COUNT", "5")))
-    # 代码迭代阶段的URL数量
-    code_iteration_url_count: int = Field(default_factory=lambda: int(os.getenv("CODE_ITERATION_URL_COUNT", "2")))
+    # 迭代次数由输入URL数量决定，无需配置
 
     # ============================================
     # 浏览器配置
