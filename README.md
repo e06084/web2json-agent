@@ -25,18 +25,37 @@
 ## 工作流程
 
 ```
-URL列表 → 任务规划 → 样本处理（截图+源码+Schema提取）
+URL列表 → 任务规划 → Schema迭代阶段（对每个HTML）
+                    ├─ 获取HTML源码 + 截图
+                    ├─ HTML → Schema（含xpath路径）
+                    ├─ 视觉 → Schema（含视觉描述）
+                    └─ 合并两个Schema
          ↓
-    Schema合并 → 代码生成 → 验证测试
+    多Schema合并（筛选+修正+去重）→ 最终Schema
          ↓
-   成功率<80%? → 迭代修复 → 最终代码
+    代码迭代阶段 → 生成/优化解析代码 → 最终代码
 ```
+
+### Schema迭代规则
+
+**对于单个HTML（假设输入5个）：**
+1. **HTML分析**：从HTML代码提取Schema（字段名、说明、值示例、**xpath路径**）
+2. **视觉分析**：从网页截图提取Schema（字段名、说明、值示例、**视觉描述**）
+3. **Schema合并**：判断相同字段，合并xpath和visual_features
+
+**处理完所有HTML后：**
+4. **多Schema整合**：
+   - 去除无意义字段（广告、导航等）
+   - 修正字段结构（元信息归属、列表字段识别）
+   - 合并xpath路径（每个字段包含多个xpath，增强鲁棒性）
+   - 生成最终Schema
 
 ### 核心技术
 
-- **多样本处理**：支持多个 URL，自动识别必需/可选字段（出现率 ≥50% 为必需）
-- **视觉理解**：多模态 AI 分析页面截图提取数据结构
-- **智能修复**：验证失败时自动分析错误并修复代码，支持自动回滚
+- **双重视角Schema提取**：同时从HTML代码和视觉布局提取Schema，互相补充
+- **多路径鲁棒性**：每个字段保留多个xpath提取路径，适应不同页面结构
+- **智能Schema合并**：自动识别相同字段、修正字段类型、优化数据结构
+- **HTML精简**：使用html_alg_lib库精简HTML，减少token消耗，提升响应速度
 - **Token 跟踪**：实时监控 API 调用成本
 
 ---
@@ -130,16 +149,27 @@ print(data)
 web2json-agent/
 ├── agent/                  # Agent 核心模块
 │   ├── planner.py         # 任务规划
-│   ├── executor.py        # 任务执行
-│   ├── validator.py       # 代码验证
+│   ├── executor.py        # 任务执行（含Schema迭代逻辑）
 │   └── orchestrator.py    # Agent 编排
 │
 ├── tools/                  # LangChain Tools
 │   ├── webpage_source.py          # 获取源码
-│   ├── webpage_screenshot.py      # 截图
-│   ├── visual_understanding.py    # 视觉理解
+│   ├── webpage_screenshot.py      # 截图（Playwright）
+│   ├── visual_understanding.py    # 视觉理解（旧版）
+│   ├── schema_extraction.py       # Schema提取和合并（新版）
+│   ├── html_simplifier.py         # HTML精简工具
 │   ├── code_generator.py          # 代码生成
 │   └── code_fixer.py              # 代码修复
+│
+├── prompts/                # Prompt 模板
+│   ├── visual_understanding.py    # 视觉理解Prompt（旧版）
+│   ├── schema_extraction.py       # Schema提取Prompt（新版）
+│   ├── code_generator.py          # 代码生成Prompt
+│   └── code_fixer.py              # 代码修复Prompt
+│
+├── html_alg_lib/           # HTML精简算法库
+│   ├── simplify.py        # HTML精简入口
+│   └── html_simplify/     # 精简算法实现
 │
 ├── config/                 # 配置
 │   └── settings.py
@@ -149,14 +179,63 @@ web2json-agent/
 │
 ├── output/                 # 输出目录
 │   └── [domain]/
-│       ├── screenshots/   # 截图
-│       ├── parsers/       # 生成的解析器
-│       └── configs/       # 配置文件
+│       ├── screenshots/       # 网页截图
+│       ├── html_original/     # 原始HTML
+│       ├── html_simplified/   # 精简HTML
+│       ├── schemas/           # Schema文件
+│       │   ├── html_schema_round_{N}.json     # HTML提取的Schema
+│       │   ├── visual_schema_round_{N}.json   # 视觉提取的Schema
+│       │   ├── merged_schema_round_{N}.json   # 合并后的Schema
+│       │   └── final_schema.json              # 最终Schema
+│       ├── parsers/           # 生成的解析器
+│       │   ├── parser_round_{N}.py            # 每轮生成的解析器
+│       │   └── final_parser.py                # 最终解析器
+│       └── result/            # 解析结果JSON
 │
 ├── main.py                # 命令行入口
-├── example.py             # 使用示例
 └── requirements.txt       # 依赖列表
 ```
+
+---
+
+## Schema格式说明
+
+### 最终Schema结构
+
+生成的`final_schema.json`包含每个字段的完整信息：
+
+```json
+{
+  "title": {
+    "type": "string",
+    "description": "文章标题",
+    "value_sample": "关于人工智能的未来",
+    "xpaths": [
+      "//h1[@class='article-title']/text()",
+      "//div[@class='title']/text()"
+    ],
+    "visual_features": "位于页面上部中央区域，字体非常大且加粗，颜色为深色..."
+  },
+  "comments": {
+    "type": "array",
+    "description": "评论列表",
+    "value_sample": [{"user": "用户A", "text": "评论内容"}],
+    "xpaths": [
+      "//div[@class='comment-list']//div[@class='comment']",
+      "//ul[@class='comments']//li"
+    ],
+    "visual_features": "位于正文下方，多个评论项垂直排列..."
+  }
+}
+```
+
+### 字段说明
+
+- **type**: 数据类型（string, number, array, object等）
+- **description**: 字段的语义描述
+- **value_sample**: 实际值示例（字符串截取前50字符）
+- **xpaths**: 数组形式，包含多个可用的xpath提取路径（增强鲁棒性）
+- **visual_features**: 视觉特征描述，包括位置、字体、颜色、布局等
 
 ---
 
@@ -186,5 +265,21 @@ MIT License
 
 ---
 
-**最后更新**: 2025-11-26
-**版本**: 1.0.0
+**最后更新**: 2025-12-12
+**版本**: 2.0.0
+
+## 更新日志
+
+### v2.0.0 (2025-12-12)
+- ✨ 新增双重视角Schema提取（HTML + 视觉）
+- ✨ 支持多xpath路径，增强解析鲁棒性
+- ✨ 智能Schema合并和结构优化
+- ✨ 集成HTML精简工具，减少token消耗
+- 🔧 使用Playwright替代DrissionPage进行截图
+- 📝 完善文档和使用说明
+
+### v1.0.0 (2025-11-26)
+- 🎉 首次发布
+- 基于视觉理解的Schema提取
+- 自动代码生成和迭代优化
+

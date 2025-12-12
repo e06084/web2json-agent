@@ -13,9 +13,13 @@ from loguru import logger
 from tools import (
     get_webpage_source,  # 获取网页源码工具
     capture_webpage_screenshot,  # 截图工具
-    extract_json_from_image,  # 提取JSON Schema工具
-    refine_schema_from_image,  # Schema迭代优化工具
+    extract_json_from_image,  # 提取JSON Schema工具（旧版）
+    refine_schema_from_image,  # Schema迭代优化工具（旧版）
     generate_parser_code,  # 生成解析代码工具
+    extract_schema_from_html,  # 从HTML提取Schema（新版）
+    extract_schema_from_image,  # 从截图提取Schema（新版）
+    merge_html_and_visual_schema,  # 合并单个HTML的两种Schema（新版）
+    merge_multiple_schemas,  # 合并多个HTML的Schema（新版）
 )
 from tools.html_simplifier import simplify_html  # HTML精简工具
 
@@ -123,10 +127,16 @@ class AgentExecutor:
 
     def _execute_schema_iteration_phase(self, urls: List[str]) -> Dict:
         """
-        执行Schema迭代阶段
+        执行Schema迭代阶段（新版）
 
-        第一轮：提取初始Schema
-        后续轮：基于新截图优化Schema
+        对每个HTML：
+        1. 获取HTML和截图
+        2. 从HTML提取Schema（包含xpath）
+        3. 从视觉提取Schema（包含visual_features）
+        4. 合并两个Schema
+
+        所有HTML处理完后：
+        5. 合并多个Schema，输出最终Schema
 
         Args:
             urls: URL列表
@@ -140,7 +150,7 @@ class AgentExecutor:
             'success': False,
         }
 
-        current_schema = None
+        all_merged_schemas = []  # 存储每个HTML的合并Schema
 
         for idx, url in enumerate(urls, 1):
             logger.info(f"\n{'─'*70}")
@@ -149,7 +159,7 @@ class AgentExecutor:
 
             try:
                 # 1. 获取HTML源码
-                logger.info(f"  [1/4] 获取HTML源码...")
+                logger.info(f"  [1/6] 获取HTML源码...")
                 html_content = get_webpage_source.invoke({"url": url})
                 logger.success(f"  ✓ HTML源码已获取（长度: {len(html_content)} 字符）")
 
@@ -160,7 +170,7 @@ class AgentExecutor:
                 logger.success(f"  ✓ 原始HTML已保存: {html_original_path}")
 
                 # 2. 精简HTML
-                logger.info(f"  [2/4] 精简HTML...")
+                logger.info(f"  [2/6] 精简HTML...")
                 try:
                     simplified_html = simplify_html(
                         html_content,
@@ -185,7 +195,7 @@ class AgentExecutor:
                     html_for_processing = html_content
 
                 # 3. 截图
-                logger.info(f"  [3/4] 截图...")
+                logger.info(f"  [3/6] 截图...")
                 screenshot_path = str(self.screenshots_dir / f"schema_round_{idx}.png")
                 screenshot_result = capture_webpage_screenshot.invoke({
                     "url": url,
@@ -193,37 +203,65 @@ class AgentExecutor:
                 })
                 logger.success(f"  ✓ 截图已保存: {screenshot_path}")
 
-                # 4. 提取或优化Schema
-                if idx == 1:
-                    logger.info(f"  [4/4] 提取初始Schema...")
-                    current_schema = extract_json_from_image.invoke({
-                        "image_path": screenshot_result
-                    })
-                    logger.success(f"  ✓ 初始Schema已提取，包含 {len(current_schema)} 个字段")
-                else:
-                    logger.info(f"  [4/4] 优化Schema（基于上一轮）...")
-                    current_schema = refine_schema_from_image.invoke({
-                        "image_path": screenshot_result,
-                        "previous_schema": current_schema
-                    })
-                    logger.success(f"  ✓ Schema已优化，当前包含 {len(current_schema)} 个字段")
+                # 4. 从HTML提取Schema（包含xpath）
+                logger.info(f"  [4/6] 从HTML提取Schema（包含xpath）...")
+                html_schema = extract_schema_from_html.invoke({
+                    "html_content": html_for_processing
+                })
+                logger.success(f"  ✓ HTML Schema已提取，包含 {len(html_schema)} 个字段")
 
-                # 保存本轮Schema
-                schema_path = self.schemas_dir / f"schema_round_{idx}.json"
-                with open(schema_path, 'w', encoding='utf-8') as f:
-                    json.dump(current_schema, f, ensure_ascii=False, indent=2)
-                logger.success(f"  ✓ Schema已保存: {schema_path}")
+                # 保存HTML Schema
+                html_schema_path = self.schemas_dir / f"html_schema_round_{idx}.json"
+                with open(html_schema_path, 'w', encoding='utf-8') as f:
+                    json.dump(html_schema, f, ensure_ascii=False, indent=2)
+                logger.success(f"  ✓ HTML Schema已保存: {html_schema_path}")
+
+                # 5. 从视觉提取Schema（包含visual_features）
+                logger.info(f"  [5/6] 从视觉提取Schema（包含视觉描述）...")
+                visual_schema = extract_schema_from_image.invoke({
+                    "image_path": screenshot_result
+                })
+                logger.success(f"  ✓ 视觉Schema已提取，包含 {len(visual_schema)} 个字段")
+
+                # 保存视觉Schema
+                visual_schema_path = self.schemas_dir / f"visual_schema_round_{idx}.json"
+                with open(visual_schema_path, 'w', encoding='utf-8') as f:
+                    json.dump(visual_schema, f, ensure_ascii=False, indent=2)
+                logger.success(f"  ✓ 视觉Schema已保存: {visual_schema_path}")
+
+                # 6. 合并两个Schema
+                logger.info(f"  [6/6] 合并HTML和视觉Schema...")
+                merged_schema = merge_html_and_visual_schema.invoke({
+                    "html_schema": html_schema,
+                    "visual_schema": visual_schema
+                })
+                logger.success(f"  ✓ Schema已合并，包含 {len(merged_schema)} 个字段")
+
+                # 保存合并后的Schema
+                merged_schema_path = self.schemas_dir / f"merged_schema_round_{idx}.json"
+                with open(merged_schema_path, 'w', encoding='utf-8') as f:
+                    json.dump(merged_schema, f, ensure_ascii=False, indent=2)
+                logger.success(f"  ✓ 合并Schema已保存: {merged_schema_path}")
+
+                # 添加到列表，用于后续多Schema合并
+                all_merged_schemas.append(merged_schema)
 
                 # 记录本轮结果
                 round_result = {
                     'round': idx,
                     'url': url,
-                    'html_original_path': str(html_original_path),  # 原始HTML路径
-                    'html_path': str(html_path),  # 精简HTML路径（后续使用）
+                    'html_original_path': str(html_original_path),
+                    'html_path': str(html_path),
                     'screenshot': screenshot_result,
-                    'schema': current_schema.copy(),
-                    'schema_path': str(schema_path),
-                    'groundtruth_schema': current_schema.copy(),
+                    'html_schema': html_schema.copy(),
+                    'html_schema_path': str(html_schema_path),
+                    'visual_schema': visual_schema.copy(),
+                    'visual_schema_path': str(visual_schema_path),
+                    'merged_schema': merged_schema.copy(),
+                    'merged_schema_path': str(merged_schema_path),
+                    'schema': merged_schema.copy(),  # 兼容性
+                    'schema_path': str(merged_schema_path),  # 兼容性
+                    'groundtruth_schema': merged_schema.copy(),  # 兼容性
                     'success': True,
                 }
                 result['rounds'].append(round_result)
@@ -246,17 +284,32 @@ class AgentExecutor:
                     # 第一轮失败则退出
                     return result
 
-        # 设置最终Schema
-        if current_schema:
-            result['final_schema'] = current_schema
-            result['success'] = True
+        # 合并多个Schema，输出最终Schema
+        if all_merged_schemas:
+            logger.info(f"\n{'─'*70}")
+            logger.info(f"合并 {len(all_merged_schemas)} 个Schema，生成最终Schema")
+            logger.info(f"{'─'*70}")
 
-            # 保存最终Schema
-            final_schema_path = self.schemas_dir / "final_schema.json"
-            with open(final_schema_path, 'w', encoding='utf-8') as f:
-                json.dump(current_schema, f, ensure_ascii=False, indent=2)
-            logger.success(f"最终Schema已保存: {final_schema_path}")
-            result['final_schema_path'] = str(final_schema_path)
+            try:
+                final_schema = merge_multiple_schemas.invoke({
+                    "schemas": all_merged_schemas
+                })
+                logger.success(f"最终Schema已生成，包含 {len(final_schema)} 个字段")
+
+                # 保存最终Schema
+                final_schema_path = self.schemas_dir / "final_schema.json"
+                with open(final_schema_path, 'w', encoding='utf-8') as f:
+                    json.dump(final_schema, f, ensure_ascii=False, indent=2)
+                logger.success(f"最终Schema已保存: {final_schema_path}")
+
+                result['final_schema'] = final_schema
+                result['final_schema_path'] = str(final_schema_path)
+                result['success'] = True
+
+            except Exception as e:
+                logger.error(f"合并多个Schema失败: {str(e)}")
+                import traceback
+                logger.debug(traceback.format_exc())
 
         return result
 
@@ -340,7 +393,8 @@ class AgentExecutor:
                         "output_dir": str(self.parsers_dir),
                         "previous_parser_code": current_parser_code,
                         "previous_parser_path": current_parser_path,
-                        "round_num": idx
+                        "round_num": idx,
+                        "importance_threshold": self.importance_threshold
                     })
                     logger.success(f"  ✓ 解析代码已优化")
 
