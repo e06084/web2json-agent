@@ -17,6 +17,7 @@ from tools import (
     refine_schema_from_image,  # Schema迭代优化工具
     generate_parser_code,  # 生成解析代码工具
 )
+from tools.html_simplifier import simplify_html  # HTML精简工具
 
 
 class AgentExecutor:
@@ -30,15 +31,21 @@ class AgentExecutor:
         # 创建子目录
         self.screenshots_dir = self.output_dir / "screenshots"
         self.parsers_dir = self.output_dir / "parsers"
-        self.html_dir = self.output_dir / "html"
+        self.html_original_dir = self.output_dir / "html_original"  # 原始HTML
+        self.html_simplified_dir = self.output_dir / "html_simplified"  # 精简HTML
         self.result_dir = self.output_dir / "result"
         self.schemas_dir = self.output_dir / "schemas"
 
         self.screenshots_dir.mkdir(exist_ok=True)
         self.parsers_dir.mkdir(exist_ok=True)
-        self.html_dir.mkdir(exist_ok=True)
+        self.html_original_dir.mkdir(exist_ok=True)
+        self.html_simplified_dir.mkdir(exist_ok=True)
         self.result_dir.mkdir(exist_ok=True)
         self.schemas_dir.mkdir(exist_ok=True)
+
+        logger.info(f"输出目录已创建：")
+        logger.info(f"  - 原始HTML: {self.html_original_dir}")
+        logger.info(f"  - 精简HTML: {self.html_simplified_dir}")
     
     def execute_plan(self, plan: Dict) -> Dict:
         """
@@ -143,18 +150,43 @@ class AgentExecutor:
 
             try:
                 # 1. 获取HTML源码
-                logger.info(f"  [1/3] 获取HTML源码...")
+                logger.info(f"  [1/4] 获取HTML源码...")
                 html_content = get_webpage_source.invoke({"url": url})
-                logger.success(f"  ✓ HTML源码已获取")
+                logger.success(f"  ✓ HTML源码已获取（长度: {len(html_content)} 字符）")
 
-                # 保存HTML源码
-                html_path = self.html_dir / f"schema_round_{idx}.html"
-                with open(html_path, 'w', encoding='utf-8') as f:
+                # 保存原始HTML
+                html_original_path = self.html_original_dir / f"schema_round_{idx}.html"
+                with open(html_original_path, 'w', encoding='utf-8') as f:
                     f.write(html_content)
-                logger.success(f"  ✓ HTML已保存: {html_path}")
+                logger.success(f"  ✓ 原始HTML已保存: {html_original_path}")
 
-                # 2. 截图
-                logger.info(f"  [2/3] 截图...")
+                # 2. 精简HTML
+                logger.info(f"  [2/4] 精简HTML...")
+                try:
+                    simplified_html = simplify_html(
+                        html_content,
+                        aggressive=True,  # 使用激进模式
+                        keep_attrs=[]  # 不保留属性，最大化精简
+                    )
+                    # 保存精简后的HTML
+                    html_simplified_path = self.html_simplified_dir / f"schema_round_{idx}.html"
+                    with open(html_simplified_path, 'w', encoding='utf-8') as f:
+                        f.write(simplified_html)
+
+                    compression_rate = (1 - len(simplified_html) / len(html_content)) * 100
+                    logger.success(f"  ✓ 精简HTML已保存: {html_simplified_path}")
+                    logger.info(f"    压缩率: {compression_rate:.1f}% ({len(html_content)} -> {len(simplified_html)} 字符)")
+
+                    # 后续使用精简后的HTML
+                    html_path = html_simplified_path
+                    html_for_processing = simplified_html
+                except Exception as e:
+                    logger.warning(f"  ⚠ HTML精简失败: {e}，使用原始HTML")
+                    html_path = html_original_path
+                    html_for_processing = html_content
+
+                # 3. 截图
+                logger.info(f"  [3/4] 截图...")
                 screenshot_path = str(self.screenshots_dir / f"schema_round_{idx}.png")
                 screenshot_result = capture_webpage_screenshot.invoke({
                     "url": url,
@@ -162,15 +194,15 @@ class AgentExecutor:
                 })
                 logger.success(f"  ✓ 截图已保存: {screenshot_path}")
 
-                # 3. 提取或优化Schema
+                # 4. 提取或优化Schema
                 if idx == 1:
-                    logger.info(f"  [3/3] 提取初始Schema...")
+                    logger.info(f"  [4/4] 提取初始Schema...")
                     current_schema = extract_json_from_image.invoke({
                         "image_path": screenshot_result
                     })
                     logger.success(f"  ✓ 初始Schema已提取，包含 {len(current_schema)} 个字段")
                 else:
-                    logger.info(f"  [3/3] 优化Schema（基于上一轮）...")
+                    logger.info(f"  [4/4] 优化Schema（基于上一轮）...")
                     current_schema = refine_schema_from_image.invoke({
                         "image_path": screenshot_result,
                         "previous_schema": current_schema
@@ -187,7 +219,8 @@ class AgentExecutor:
                 round_result = {
                     'round': idx,
                     'url': url,
-                    'html_path': str(html_path),
+                    'html_original_path': str(html_original_path),  # 原始HTML路径
+                    'html_path': str(html_path),  # 精简HTML路径（后续使用）
                     'screenshot': screenshot_result,
                     'schema': current_schema.copy(),
                     'schema_path': str(schema_path),
@@ -277,16 +310,19 @@ class AgentExecutor:
             logger.info(f"{'─'*70}")
 
             try:
-                # 复用Schema阶段的HTML
+                # 复用Schema阶段的HTML（精简后的）
                 html_path = schema_round.get('html_path')
+                html_original_path = schema_round.get('html_original_path')
                 if not html_path:
                     logger.error(f"  ✗ Schema阶段第 {idx} 轮缺少HTML路径")
                     continue
 
-                logger.info(f"  [1/2] 复用Schema阶段的HTML: {html_path}")
+                logger.info(f"  [1/2] 复用Schema阶段的精简HTML: {html_path}")
+                if html_original_path:
+                    logger.debug(f"    原始HTML位置: {html_original_path}")
                 with open(html_path, 'r', encoding='utf-8') as f:
                     html_content = f.read()
-                logger.success(f"  ✓ HTML已加载")
+                logger.success(f"  ✓ 精简HTML已加载（长度: {len(html_content)} 字符）")
 
                 # 生成或优化解析代码
                 if idx == 1:
@@ -496,12 +532,18 @@ class AgentExecutor:
             logger.info(f"  加载最终解析器: {final_parser_path}")
             parser = self._load_parser(final_parser_path)
 
-            # 直接扫描html目录下的所有HTML文件
-            html_files = sorted(self.html_dir.glob("*.html"))
+            # 扫描精简HTML目录下的所有HTML文件
+            html_files = sorted(self.html_simplified_dir.glob("*.html"))
 
             if not html_files:
-                logger.warning("  html目录下没有找到HTML文件")
-                return
+                logger.warning(f"  精简HTML目录下没有找到HTML文件: {self.html_simplified_dir}")
+                # 尝试使用原始HTML目录
+                html_files = sorted(self.html_original_dir.glob("*.html"))
+                if html_files:
+                    logger.info(f"  使用原始HTML目录: {self.html_original_dir}")
+                else:
+                    logger.error("  原始HTML目录也没有找到HTML文件")
+                    return
 
             logger.info(f"  找到 {len(html_files)} 个HTML文件")
 
