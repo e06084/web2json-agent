@@ -14,8 +14,7 @@
 2. 📸 渲染HTML并截图（DrissionPage）
 3. 🔍 双重Schema提取（HTML分析 + 视觉理解）
 4. 🔄 智能Schema合并与优化
-5. 💻 生成 BeautifulSoup 解析代码（Claude Sonnet 4.5）
-6. 🎯 Token 使用跟踪和成本控制
+5. 💻 生成 BeautifulSoup 解析代码
 
 ### 适用场景
 
@@ -40,7 +39,7 @@
 
 ### Schema迭代规则
 
-**对于单个HTML（假设输入5个）：**
+**对于单个HTML（建议输入2～5个）：**
 1. **HTML分析**：从HTML代码提取Schema（字段名、说明、值示例、**xpath路径**）
 2. **视觉分析**：从网页截图提取Schema（字段名、说明、值示例、**视觉描述**）
 3. **Schema合并**：判断相同字段，合并xpath和visual_features
@@ -80,52 +79,44 @@ pip install -e .
 
 ## ⚙️ 配置（重要！）
 
-### 首次使用配置
+### 环境配置
 
-**安装后必须先配置 API 密钥才能使用！**
+**使用前必须先配置 .env 文件！**
 
-#### 方法一：交互式配置（推荐新手）
+1. **复制配置模板**
 
 ```bash
-# 运行配置向导
-web2json setup
-
-# 按照提示输入:
-# 1. API 密钥（必需）
-# 2. API 地址（必需）
-# 3. 模型配置（可选）
-
-# 验证配置
-web2json check
+cp .env.example .env
 ```
 
-#### 方法二：快速配置
+2. **编辑 .env 文件，填入你的配置**
 
 ```bash
-# 1. 创建配置文件
-web2json init
-
-# 2. 编辑 .env 文件，填入你的 API 密钥
 vim .env  # 或使用其他编辑器
-
-# 3. 验证配置
-web2json check
 ```
 
-### 最小配置示例
-
-在项目目录创建 `.env` 文件，填入以下内容：
+3. **必填配置项**
 
 ```bash
 # API 配置（必需）
-OPENAI_API_KEY=your_api_key_here
-OPENAI_API_BASE=https://api.openai.com/v1
-
-# 模型配置（可选，默认值如下）
-AGENT_MODEL=claude-sonnet-4-5-20250929
-CODE_GEN_MODEL=claude-sonnet-4-5-20250929
-VISION_MODEL=qwen-vl-max
+OPENAI_API_KEY=your_api_key_here          # 你的 API 密钥
+OPENAI_API_BASE=https://api.openai.com/v1  # API 地址
 ```
+
+4. **可选配置项**（有默认值，可不修改）
+
+```bash
+# 模型配置
+AGENT_MODEL=claude-sonnet-4-5-20250929      # Agent 使用的模型
+CODE_GEN_MODEL=claude-sonnet-4-5-20250929   # 代码生成模型
+VISION_MODEL=qwen-vl-max                     # 视觉理解模型
+
+# Agent 配置
+MAX_ITERATIONS=5          # 最大迭代次数
+MIN_SAMPLE_SIZE=2         # 最小样本数量
+```
+
+更多配置选项请查看 `.env.example` 文件。
 
 ---
 
@@ -139,12 +130,6 @@ web2json --help
 
 # 从目录读取HTML文件（推荐）
 web2json -d input_html/ -o output/blog
-
-# 指定输出目录和页面类型
-web2json -d input_html/ -o output/blog -t blog_article
-
-# 跳过验证，快速生成
-web2json -d input_html/ --no-validate
 ```
 
 ### Python 源码使用（开发模式）
@@ -305,24 +290,14 @@ MIT License
 ## 更新日志
 
 ### v2.1.1 (2025-12-18)
-- 📂 重构Prompts模块：将schema_extraction.py拆分为schema_extraction.py和schema_merge.py
-- 🎯 职责分离：提取和合并功能独立，便于维护
 - ✨ 更清晰的模块结构：每个模块职责单一明确
-
-### v2.1.0 (2025-12-18)
-- 🧹 代码清理：移除近1000行冗余代码
-- ♻️ 简化依赖：移除未使用的Playwright，统一使用DrissionPage
-- 🎯 职责明确：每个工具职责清晰，无重复功能
-- 📦 优化打包：更新pyproject.toml配置
 - ✅ 完善CLI：新增配置验证和交互式设置
 
 ### v2.0.0 (2025-12-12)
 - ✨ 新增双重视角Schema提取（HTML + 视觉）
 - ✨ 支持多xpath路径，增强解析鲁棒性
 - ✨ 智能Schema合并和结构优化
-- ✨ 集成HTML精简工具，减少token消耗
-- 🔧 优化截图工具，使用DrissionPage
-- 📝 完善文档和使用说明
+- ✨ 集成HTML精简工具，减少token消耗以及冗余输入
 
 ### v1.0.0 (2025-11-26)
 - 🎉 首次发布

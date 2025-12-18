@@ -112,44 +112,52 @@ class ConfigValidator:
     def _get_default_template(cls) -> str:
         """获取默认配置模板"""
         return """# ============================================
-# API 配置 (必需)
+# web2json-agent 环境配置文件
 # ============================================
-# OpenAI API 密钥（或兼容 OpenAI API 的服务密钥）
-OPENAI_API_KEY=your_api_key_here
+# 使用方法: cp .env.example .env
+# 然后修改 .env 文件中的配置值
 
-# API 基础 URL（如使用第三方服务，修改此项）
+# ============================================
+# API 配置（必填）
+# ============================================
+OPENAI_API_KEY=your_api_key_here
 OPENAI_API_BASE=https://api.openai.com/v1
 
 # ============================================
-# 模型配置 (可选，使用默认值即可)
+# 模型配置（可选，使用默认值）
 # ============================================
-# Agent 模型
+
+# Agent 规划和执行
 AGENT_MODEL=claude-sonnet-4-5-20250929
 AGENT_TEMPERATURE=0
 
-# 代码生成模型
+# 代码生成
 CODE_GEN_MODEL=claude-sonnet-4-5-20250929
 CODE_GEN_TEMPERATURE=0.3
-CODE_GEN_MAX_TOKENS=8192
+CODE_GEN_MAX_TOKENS=16384
 
-# 视觉理解模型
+# 视觉理解（图片转JSON）
 VISION_MODEL=qwen-vl-max
 VISION_TEMPERATURE=0
-VISION_MAX_TOKENS=4096
+VISION_MAX_TOKENS=16384
 
 # ============================================
-# 浏览器配置
+# 浏览器配置（可选）
 # ============================================
 HEADLESS=true
 TIMEOUT=30000
 SCREENSHOT_FULL_PAGE=true
 
 # ============================================
-# HTML精简配置
+# HTML精简配置（可选）
 # ============================================
-# 精简模式: xpath/aggressive/conservative
+# 精简模式: xpath, aggressive, conservative
+# - xpath: 为Schema提取优化，保留定位属性和内容标签（推荐）
+# - aggressive: 激进模式，最大化压缩
+# - conservative: 保守模式，保留更多原始结构
 HTML_SIMPLIFY_MODE=xpath
-# 保留的HTML属性（逗号分隔）
+
+# 保留的HTML属性（逗号分隔，仅xpath和aggressive模式有效）
 HTML_KEEP_ATTRS=class,id,href,src,data-id
 """
 
