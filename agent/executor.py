@@ -198,11 +198,11 @@ class AgentExecutor:
                     html_path = html_original_path
                     html_for_processing = html_content
 
-                # 3. 渲染并截图
-                logger.info(f"  [3/6] 渲染并截图本地HTML...")
+                # 3. 渲染并截图（使用原始HTML，而不是精简后的HTML）
+                logger.info(f"  [3/6] 渲染并截图原始HTML...")
                 screenshot_path = str(self.screenshots_dir / f"schema_round_{idx}.png")
                 screenshot_result = capture_html_file_screenshot.invoke({
-                    "html_file_path": html_file_path,
+                    "html_file_path": str(html_original_path),  # 使用原始HTML而不是精简后的HTML
                     "save_path": screenshot_path
                 })
                 logger.success(f"  ✓ 截图已保存: {screenshot_path}")

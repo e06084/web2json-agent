@@ -17,22 +17,67 @@ from prompts.schema_merge import SchemaMergePrompts
 
 def _parse_llm_response(response: str) -> Dict:
     """解析模型响应中的JSON"""
+    import tempfile
+    from pathlib import Path
+
+    def try_fix_json(json_str: str) -> str:
+        """尝试修复常见的JSON格式问题"""
+        # 修复：缺少逗号（对象内）
+        json_str = re.sub(r'"\s*\n\s*"', '",\n  "', json_str)
+
+        # 修复：对象后缺少逗号
+        json_str = re.sub(r'}\s*\n\s*"', '},\n  "', json_str)
+
+        # 修复：尾随逗号
+        json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+
+        return json_str
+
     try:
         # 尝试提取JSON代码块
         json_match = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL)
         if json_match:
-            return json.loads(json_match.group(1))
+            json_str = json_match.group(1)
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON解析失败，尝试修复: {str(e)}")
+                # 尝试修复JSON
+                fixed_json = try_fix_json(json_str)
+                try:
+                    return json.loads(fixed_json)
+                except:
+                    logger.debug(f"修复后的JSON: {fixed_json[:1000]}")
+                    raise
 
         # 尝试提取普通JSON
         match = re.search(r"\{.*\}", response, re.DOTALL)
         if match:
-            return json.loads(match.group())
+            json_str = match.group()
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                fixed_json = try_fix_json(json_str)
+                return json.loads(fixed_json)
 
         # 直接解析
         return json.loads(response)
     except Exception as e:
         logger.error(f"解析模型响应失败: {str(e)}")
-        logger.debug(f"原始响应: {response[:500]}")
+
+        # 保存完整响应到临时文件，便于调试
+        try:
+            temp_dir = Path("logs/llm_responses")
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            error_file = temp_dir / f"error_response_{timestamp}.txt"
+            error_file.write_text(response, encoding='utf-8')
+            logger.error(f"完整响应已保存到: {error_file}")
+        except:
+            pass
+
+        logger.debug(f"原始响应（前1000字符）: {response[:1000]}")
         raise Exception(f"解析模型响应失败: {str(e)}")
 
 
