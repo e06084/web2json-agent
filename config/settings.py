@@ -7,9 +7,16 @@ from pydantic import BaseModel, Field
 from pathlib import Path
 from dotenv import load_dotenv
 
-# 加载环境变量
-env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(env_path)
+# 加载环境变量（优先从当前工作目录加载，其次从包目录）
+env_paths = [
+    Path.cwd() / ".env",  # 用户工作目录（优先）
+    Path(__file__).parent.parent / ".env",  # 包安装目录（fallback）
+]
+
+for env_path in env_paths:
+    if env_path.exists():
+        load_dotenv(env_path, override=True)
+        break
 
 
 class Settings(BaseModel):

@@ -62,7 +62,87 @@
 
 ## 🚀 快速开始
 
-### 第 1 步：克隆项目并安装依赖
+选择以下任一方式开始使用：
+
+### 方式 1：通过 pip 安装（推荐）
+
+适合**直接使用**工具的用户
+
+#### 第 1 步：安装包
+
+```bash
+pip install web2json-agent
+```
+
+#### 第 2 步：初始化配置
+
+**选项 A：交互式配置向导（推荐）**
+```bash
+web2json setup
+# 按提示输入 API 密钥和配置
+```
+
+**选项 B：手动配置**
+```bash
+# 创建配置文件模板
+web2json init
+
+# 编辑 .env 文件，填入你的 API 配置
+vim .env  # 或者手动修改
+```
+
+**必填配置项**（在 `.env` 文件中修改）：
+```bash
+OPENAI_API_KEY=your_api_key_here          # 你的 API 密钥
+OPENAI_API_BASE=https://api.openai.com/v1  # API 地址
+```
+
+#### 第 3 步：验证配置
+
+```bash
+# 检查配置
+web2json check
+
+# 测试 API 连接（推荐）
+web2json check --test-api
+```
+
+#### 第 4 步：准备 HTML 文件
+
+在任意目录下放置 **2-5 个**同类型网页的 HTML 源码文件：
+
+```bash
+mkdir html_samples
+# 将 HTML 文件放入 html_samples/ 目录
+```
+
+#### 第 5 步：生成解析器
+
+```bash
+# 基础用法
+web2json -d html_samples/ -o output/blog
+
+# 指定页面类型（可选）
+web2json -d html_samples/ -o output/blog --domain blog_article
+```
+
+#### 第 6 步：使用生成的解析器
+
+```bash
+# 解析单个文件
+python output/blog/final_parser.py example.html
+
+# 解析URL
+python output/blog/final_parser.py https://example.com/article
+```
+
+---
+
+### 方式 2：克隆仓库开发
+
+适合**开发者**和**贡献者**
+
+#### 第 1 步：克隆项目并安装依赖
 
 ```bash
 # 克隆项目
@@ -73,7 +153,7 @@ cd web2json-agent
 pip install -r requirements.txt
 ```
 
-### 第 2 步：配置 API 密钥（⚠️ 必需）
+#### 第 2 步：配置 API 密钥（⚠️ 必需）
 
 ```bash
 # 复制配置模板
@@ -91,11 +171,11 @@ OPENAI_API_BASE=https://api.openai.com/v1  # API 地址
 ```
 > 更多配置选项请查看 `.env.example` 文件
 
-### 第 3 步：准备 HTML 文件
+#### 第 3 步：准备 HTML 文件
 
-在 `input_html/` 目录下放置 **2-5 个**同类型网页的 HTML 源码文件（已有示例）：
+在 `input_html/` 目录下放置 **2-5 个**同类型网页的 HTML 源码文件（已有示例）
 
-### 第 4 步：运行解析器生成
+#### 第 4 步：运行解析器生成
 
 ```bash
 # 基础用法
@@ -105,11 +185,11 @@ python main.py -d input_html/ -o output/blog
 python main.py -d input_html/ -o output/blog --domain blog_article
 ```
 
-### 第 5 步：使用生成的解析器
+#### 第 5 步：使用生成的解析器
 
 生成完成后，解析器代码保存在 `output/blog/final_parser.py`
 
-#### 方式 1：使用 demo.py（推荐）
+**使用方式 A：使用 demo.py（推荐）**
 
 项目根目录提供了通用的 `demo.py` 脚本，自动查找最新的解析器：
 
@@ -130,7 +210,7 @@ python demo.py -p output/blog/final_parser.py example.html
 python demo.py https://example.com/article
 ```
 
-#### 方式 2：直接运行 final_parser.py
+**使用方式 B：直接运行 final_parser.py**
 
 生成的解析器可以直接作为命令行工具使用：
 
@@ -142,7 +222,7 @@ python output/blog/final_parser.py example.html
 python output/blog/final_parser.py https://example.com/article
 ```
 
-#### 方式 3：在你的代码中导入
+**使用方式 C：在你的代码中导入**
 
 ```python
 import sys
@@ -288,13 +368,15 @@ MIT License
 ---
 
 **最后更新**: 2025-12-18
-**版本**: 1.0.1
+**版本**: 1.0.2
 
 ## 更新日志
 
+### v1.0.2 (2025-12-18)
+- 🐛 **修复pip安装后，API配置读取的问题**
+
 ### v1.0.1 (2025-12-18)
 - 🐛 修复本地HTML文件截图失败问题
-  - 增加等待时间：从3秒提升至7秒（5+2秒）
   - 添加body元素等待机制
   - 添加页面尺寸检查和警告
   - 添加截图重试机制（最多2次）
