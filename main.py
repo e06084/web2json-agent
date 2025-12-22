@@ -162,6 +162,12 @@ def main():
         action='store_true',
         help='是否按布局聚类分别生成解析器（默认: 否，使用全部HTML生成单个解析器）'
     )
+    parser.add_argument(
+        '--iteration-rounds',
+        type=int,
+        default=3,
+        help='迭代轮数（用于Schema学习的样本数量，默认: 3）'
+    )
 
     args = parser.parse_args()
 
@@ -190,7 +196,8 @@ def main():
     # 生成解析器（使用全部HTML文件，不做聚类拆分）
     result = agent.generate_parser(
         html_files=html_files,
-        domain=args.domain
+        domain=args.domain,
+        iteration_rounds=args.iteration_rounds
     )
 
     # 输出结果
