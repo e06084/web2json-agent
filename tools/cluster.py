@@ -1,33 +1,40 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 import numpy as np
 from sklearn.cluster import DBSCAN
+from tqdm import tqdm
 
 from .html_layout_cosin import get_feature, similarity, __get_max_width_layer
 
 
-def _compute_features(html_list: List[str]) -> List[Dict]:
+def _compute_features(html_list: List[str], show_progress: bool = False) -> List[Dict]:
     """从 HTML 源码列表中提取布局特征。
 
     Args:
         html_list: 多个 HTML 源码字符串列表。
+        show_progress: 是否显示进度条。
 
     Returns:
         每个 HTML 对应的 feature 字典列表（get_feature 的返回值）。
     """
 
     features: List[Dict] = []
-    for html in html_list:
+    iterator = tqdm(html_list, desc="提取特征", unit="页") if show_progress else html_list
+    for html in iterator:
         feat = get_feature(html)
         features.append(feat)
     return features
 
 
-def _build_similarity_matrix(features: List[Dict]) -> np.ndarray:
+def _build_similarity_matrix(features: List[Dict], show_progress: bool = False) -> np.ndarray:
     """基于 demo 中的相似度计算方式构建成对相似度矩阵。
 
-    使用 __get_max_width_layer 计算每个页面的“有效层数”，
+    使用 __get_max_width_layer 计算每个页面的"有效层数"，
     两个页面之间的 similarity 使用它们层数平均值作为 layer_n。
+
+    Args:
+        features: 特征列表。
+        show_progress: 是否显示进度条。
     """
 
     n = len(features)
@@ -40,7 +47,11 @@ def _build_similarity_matrix(features: List[Dict]) -> np.ndarray:
 
     sim_mat = np.zeros((n, n), dtype=np.float32)
 
-    for i in range(n):
+    # 计算需要执行的相似度计算次数（上三角矩阵）
+    total_comparisons = n * (n - 1) // 2
+
+    iterator = tqdm(range(n), desc="计算相似度矩阵", unit="行") if show_progress else range(n)
+    for i in iterator:
         sim_mat[i, i] = 1.0
         for j in range(i + 1, n):
             # 按 demo 中逻辑：两页的 layer_n 取平均再取整
@@ -58,6 +69,7 @@ def cluster_html_layouts(
     html_list: List[str],
     eps: float = 0.05,
     min_samples: int = 2,
+    show_progress: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, List[List[str]]]:
     """对多个 HTML 字符串按布局相似度进行 DBSCAN 聚类。
 
@@ -66,6 +78,7 @@ def cluster_html_layouts(
         eps: DBSCAN 的 eps（基于 "距离" 的半径）。这里距离 = 1 - similarity，
              因此 eps 越小，要求相似度越高才会划为同一簇。
         min_samples: DBSCAN 中形成簇所需的最小样本数。
+        show_progress: 是否显示进度条（默认False）。
 
     Returns:
         labels: shape (n,)，每个 HTML 对应的簇编号，-1 表示噪声点。
@@ -81,12 +94,19 @@ def cluster_html_layouts(
         )
 
     # 1. 提取特征
-    features = _compute_features(html_list)
+    if show_progress:
+        print(f"\n{'='*60}")
+        print(f"开始聚类分析: {len(html_list)} 个HTML页面")
+        print(f"{'='*60}")
+
+    features = _compute_features(html_list, show_progress=show_progress)
 
     # 2. 计算相似度矩阵（基于 demo 中的 similarity 调用逻辑）
-    sim_mat = _build_similarity_matrix(features)
+    sim_mat = _build_similarity_matrix(features, show_progress=show_progress)
 
-    # 3. 将相似度转为“距离”矩阵供 DBSCAN 使用
+    # 3. 将相似度转为"距离"矩阵供 DBSCAN 使用
+    if show_progress:
+        print("执行DBSCAN聚类...")
     dist_mat = 1.0 - sim_mat
 
     # 4. 进行 DBSCAN 聚类
@@ -99,6 +119,12 @@ def cluster_html_layouts(
     for lbl in unique_labels:
         cluster_htmls = [html for html, l in zip(html_list, labels) if l == lbl]
         clusters.append(cluster_htmls)
+
+    if show_progress:
+        n_clusters = len(unique_labels)
+        n_noise = list(labels).count(-1)
+        print(f"✓ 聚类完成: {n_clusters} 个簇, {n_noise} 个噪声点")
+        print(f"{'='*60}\n")
 
     return labels, sim_mat, clusters
 

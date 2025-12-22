@@ -119,15 +119,6 @@
 
 ### 🔧 工作流程
 
-```mermaid
-graph LR
-    A[输入 URL/HTML 源码] --> B[智能样本选择]
-    B --> C[Schema 学习与代码迭代]
-    C --> D[生成优化解析器]
-    D --> E[自动批量处理所有网页]
-    E --> F[输出结构化数据]
-```
-
 **完整流程说明**：
 
 1. **📥 输入网页数据** - 提供 HTML 源码文件目录
@@ -155,8 +146,6 @@ web2json setup  # 交互式配置（推荐）
 # 或手动配置：web2json init && vim .env
 
 # 3. 准备网页目录并一键生成解析器+批量解析
-mkdir html_samples
-# 将同类型网页放入目录
 web2json -d html_samples/ -o output/blog
 
 # 完成！解析结果自动保存到 output/blog/result/ 目录
@@ -168,39 +157,6 @@ web2json -d html_samples/ -o output/blog
 2. 基于样本生成解析器，保存到 `output/blog/parsers/final_parser.py`
 3. 自动使用生成的解析器解析**所有** HTML 文件
 4. 解析结果保存到 `output/blog/result/` 目录，每个 HTML 对应一个 JSON 文件
-
-**高级用法**：
-
-```bash
-# 指定迭代轮数（用于学习的样本数量）
-web2json -d html_samples/ -o output/blog --iteration-rounds 5
-
-# 指定域名
-web2json -d html_samples/ -o output/blog --domain example.com
-
-# 如需手动使用生成的解析器
-python output/blog/parsers/final_parser.py example.html              # 解析HTML文件
-python output/blog/parsers/final_parser.py https://example.com       # 解析URL
-```
-
-**性能调优**（可选）：
-
-在 `.env` 文件中配置并发数，避免 API 限流：
-
-```bash
-# 同时进行的 Schema 提取任务数量（默认: 5）
-MAX_CONCURRENT_EXTRACTIONS=5
-# 同时进行的 Schema 合并任务数量（默认: 5）
-MAX_CONCURRENT_MERGES=5
-```
-
-💡 **提示**：如果遇到 API 限流错误，可以降低这两个值（如设为 2 或 3）
-
----
-
-## 🗺️ 开发计划
-
-查看 [TODO.md](TODO.md) 了解项目的开发路线图和待实现功能。
 
 ---
 
