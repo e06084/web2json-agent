@@ -60,6 +60,13 @@ class Settings(BaseModel):
     max_concurrent_merges: int = Field(default_factory=lambda: int(os.getenv("MAX_CONCURRENT_MERGES", "5")))
 
     # ============================================
+    # 布局聚类配置
+    # ============================================
+    # DBSCAN聚类参数
+    cluster_eps: float = Field(default_factory=lambda: float(os.getenv("CLUSTER_EPS", "0.05")))
+    cluster_min_samples: int = Field(default_factory=lambda: int(os.getenv("CLUSTER_MIN_SAMPLES", "2")))
+
+    # ============================================
     # 浏览器配置
     # ============================================
     headless: bool = Field(default_factory=lambda: os.getenv("HEADLESS", "true").lower() == "true")

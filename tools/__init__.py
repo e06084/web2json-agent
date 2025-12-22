@@ -11,6 +11,8 @@ from .schema_extraction import (
     merge_html_and_visual_schema,
     merge_multiple_schemas
 )
+from .cluster import cluster_html_layouts
+from .html_layout_cosin import get_feature, similarity
 
 __all__ = [
     'get_html_from_file',
@@ -21,5 +23,8 @@ __all__ = [
     'extract_schema_from_image',
     'merge_html_and_visual_schema',
     'merge_multiple_schemas',
+    'cluster_html_layouts',
+    'get_feature',
+    'similarity',
 ]
 

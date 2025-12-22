@@ -69,7 +69,12 @@ def cmd_generate(args):
         check_config_or_guide()
 
     # 导入并执行主程序
-    from main import main as main_func, setup_logger, read_html_files_from_directory
+    from main import (
+        main as main_func,
+        setup_logger,
+        read_html_files_from_directory,
+        generate_parsers_by_layout_clusters
+    )
     from agent import ParserAgent
     from loguru import logger
 
@@ -83,6 +88,17 @@ def cmd_generate(args):
     logger.info(f"从目录读取HTML文件: {args.directory}")
     html_files = read_html_files_from_directory(args.directory)
     logger.info(f"读取到 {len(html_files)} 个HTML文件")
+
+    # 根据 cluster 参数选择生成方式
+    if getattr(args, 'cluster', False):
+        # 按布局聚类分别生成解析器
+        logger.info("使用布局聚类模式，将为每个布局簇生成独立的解析器")
+        generate_parsers_by_layout_clusters(
+            html_files=html_files,
+            base_output=args.output,
+            domain=args.domain,
+        )
+        return
 
     # 创建Agent
     agent = ParserAgent(output_dir=args.output)
@@ -173,6 +189,11 @@ def main():
         '--iteration-rounds',
         type=int,
         help='迭代轮数（用于Schema学习的样本数量，默认: 3）'
+    )
+    parser.add_argument(
+        '--cluster',
+        action='store_true',
+        help='是否按布局聚类分别生成解析器（默认: 否，使用全部HTML生成单个解析器）'
     )
     parser.add_argument(
         '--skip-config-check',

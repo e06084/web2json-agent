@@ -72,59 +72,176 @@ def generate_parsers_by_layout_clusters(
     html_files: list,
     base_output: str,
     domain: str | None = None,
+    eps: float | None = None,
+    min_samples: int | None = None,
 ) -> None:
     """按布局聚类后分别为每个簇生成解析器。
 
-    这是一个可选的辅助方法，不在 main 的默认流程中强制调用。
+    Args:
+        html_files: HTML文件路径列表
+        base_output: 输出目录基础路径
+        domain: 域名（可选）
+        eps: DBSCAN的eps参数，距离 = 1 - similarity，eps越小要求相似度越高（默认使用配置值）
+        min_samples: DBSCAN的min_samples参数，形成簇所需的最小样本数（默认使用配置值）
     """
+    from pathlib import Path
+    import shutil
+    from config.settings import settings
+
+    # 使用配置中的默认值
+    if eps is None:
+        eps = settings.cluster_eps
+    if min_samples is None:
+        min_samples = settings.cluster_min_samples
+
+    logger.info("="*70)
+    logger.info("HtmlParserAgent - 按布局聚类生成解析器")
+    logger.info("="*70)
 
     # 读取HTML内容用于聚类
+    logger.info(f"正在读取 {len(html_files)} 个HTML文件...")
     html_contents = []
     for file_path in html_files:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            html_contents.append(f.read())
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                html_contents.append(f.read())
+        except Exception as e:
+            logger.error(f"读取文件失败 {file_path}: {e}")
+            sys.exit(1)
 
     # 使用布局相似度聚类HTML
-    labels, sim_mat, clusters = cluster_html_layouts(html_contents)
+    logger.info(f"正在进行布局聚类分析 (eps={eps}, min_samples={min_samples})...")
+    try:
+        labels, sim_mat, clusters = cluster_html_layouts(
+            html_contents,
+            eps=eps,
+            min_samples=min_samples
+        )
+    except Exception as e:
+        logger.error(f"聚类失败: {e}")
+        sys.exit(1)
+
+    # 统计聚类结果
     unique_labels = sorted(set(labels))
+    noise_count = sum(1 for l in labels if l == -1)
+    cluster_count = len([l for l in unique_labels if l != -1])
+
+    logger.info("-"*70)
+    logger.info("聚类分析完成:")
+    logger.info(f"  总文件数: {len(html_files)}")
+    logger.info(f"  识别出的布局簇数: {cluster_count}")
+    logger.info(f"  噪声点（未归类）: {noise_count}")
+    logger.info("-"*70)
+
+    # 为每个簇输出详细信息
+    for lbl in unique_labels:
+        cluster_files = [p for p, l in zip(html_files, labels) if l == lbl]
+        if lbl == -1:
+            logger.info(f"噪声点 (label=-1): {len(cluster_files)} 个文件")
+        else:
+            logger.info(f"簇 {lbl}: {len(cluster_files)} 个文件")
 
     logger.info("="*70)
-    logger.info("HtmlParserAgent - 按布局簇生成解析器")
-    logger.info("="*70)
-    logger.info(f"共得到 {len(unique_labels)} 个簇（含噪声 -1），准备分别生成解析器")
 
-    any_failure = False
+    # 保存聚类结果到文件
+    base_output_path = Path(base_output)
+    cluster_info_file = base_output_path.parent / f"{base_output_path.name}_cluster_info.txt"
+    try:
+        with open(cluster_info_file, 'w', encoding='utf-8') as f:
+            f.write("HTML布局聚类结果\n")
+            f.write("="*70 + "\n\n")
+            f.write(f"聚类参数:\n")
+            f.write(f"  eps: {eps}\n")
+            f.write(f"  min_samples: {min_samples}\n\n")
+            f.write(f"聚类统计:\n")
+            f.write(f"  总文件数: {len(html_files)}\n")
+            f.write(f"  布局簇数: {cluster_count}\n")
+            f.write(f"  噪声点数: {noise_count}\n\n")
+
+            for lbl in unique_labels:
+                cluster_files = [p for p, l in zip(html_files, labels) if l == lbl]
+                f.write(f"\n{'噪声点' if lbl == -1 else f'簇 {lbl}'} ({len(cluster_files)} 个文件):\n")
+                for file_path in cluster_files:
+                    f.write(f"  - {Path(file_path).name}\n")
+
+        logger.info(f"聚类信息已保存到: {cluster_info_file}")
+    except Exception as e:
+        logger.warning(f"保存聚类信息失败: {e}")
 
     # 针对每个簇分别创建 Agent 并生成解析器
+    any_failure = False
+    successful_clusters = []
+
     for lbl in unique_labels:
         cluster_files = [p for p, l in zip(html_files, labels) if l == lbl]
         if not cluster_files:
             continue
 
-        output_dir = f"{base_output}_cluster{lbl}"
-        logger.info("-" * 70)
-        logger.info(f"开始为簇 {lbl} 生成解析器，输出目录: {output_dir}")
-        logger.info(f"该簇包含 {len(cluster_files)} 个HTML文件")
-
-        agent = ParserAgent(output_dir=output_dir)
-        result = agent.generate_parser(
-            html_files=cluster_files,
-            domain=domain,
-        )
-
-        if result['success']:
-            logger.success(f"\n✓ 簇 {lbl} 的解析器生成成功!")
-            logger.info(f"  解析器路径: {result['parser_path']}")
-            logger.info(f"  配置路径: {result['config_path']}")
-            logger.info("  使用方法:")
-            logger.info(f"    python {result['parser_path']} <url_or_html_file>")
+        # 为噪声点使用特殊命名
+        if lbl == -1:
+            output_dir = f"{base_output}_noise"
+            cluster_name = "噪声点"
         else:
+            output_dir = f"{base_output}_cluster{lbl}"
+            cluster_name = f"簇 {lbl}"
+
+        logger.info("-" * 70)
+        logger.info(f"开始为{cluster_name}生成解析器")
+        logger.info(f"  输出目录: {output_dir}")
+        logger.info(f"  HTML文件数: {len(cluster_files)}")
+
+        # 将该簇的HTML文件复制到输出目录
+        output_path = Path(output_dir)
+        cluster_html_dir = output_path / "input_html"
+        try:
+            cluster_html_dir.mkdir(parents=True, exist_ok=True)
+            for src_file in cluster_files:
+                dst_file = cluster_html_dir / Path(src_file).name
+                shutil.copy2(src_file, dst_file)
+            logger.info(f"  已将{len(cluster_files)}个HTML文件复制到: {cluster_html_dir}")
+        except Exception as e:
+            logger.error(f"复制HTML文件失败: {e}")
+
+        # 创建Agent并生成解析器
+        try:
+            agent = ParserAgent(output_dir=output_dir)
+            result = agent.generate_parser(
+                html_files=cluster_files,
+                domain=domain,
+            )
+
+            if result['success']:
+                logger.success(f"\n✓ {cluster_name}的解析器生成成功!")
+                logger.info(f"  解析器路径: {result['parser_path']}")
+                logger.info(f"  配置路径: {result['config_path']}")
+                logger.info(f"  结果目录: {result.get('results_dir', 'N/A')}")
+                logger.info("  使用方法:")
+                logger.info(f"    python {result['parser_path']} <url_or_html_file>")
+                successful_clusters.append((lbl, cluster_name, result))
+            else:
+                any_failure = True
+                logger.error(f"\n✗ {cluster_name}的解析器生成失败")
+                if 'error' in result:
+                    logger.error(f"  错误: {result['error']}")
+        except Exception as e:
             any_failure = True
-            logger.error(f"\n✗ 簇 {lbl} 的解析器生成失败")
-            if 'error' in result:
-                logger.error(f"  错误: {result['error']}")
+            logger.error(f"\n✗ {cluster_name}的解析器生成失败: {e}")
+
+    # 输出总结
+    logger.info("\n" + "="*70)
+    logger.info("所有簇的解析器生成完成")
+    logger.info("="*70)
+    logger.info(f"总簇数: {len(unique_labels)}")
+    logger.info(f"成功: {len(successful_clusters)}")
+    logger.info(f"失败: {len(unique_labels) - len(successful_clusters)}")
+
+    if successful_clusters:
+        logger.info("\n成功生成的解析器:")
+        for lbl, name, result in successful_clusters:
+            logger.info(f"  {name}: {result['parser_path']}")
 
     if any_failure:
+        logger.warning("\n部分簇的解析器生成失败，请检查日志")
         sys.exit(1)
 
 
