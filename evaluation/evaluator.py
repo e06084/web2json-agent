@@ -75,7 +75,7 @@ class SWDEEvaluator:
     def _key_matches(self, json_key: str, attribute: str) -> bool:
         """
         Check if JSON key matches attribute name.
-        Handles variations like underscores, hyphens, case differences.
+        Handles variations like underscores, hyphens, case differences, and plurals.
 
         Args:
             json_key: Key from JSON
@@ -86,7 +86,20 @@ class SWDEEvaluator:
         """
         norm_key = json_key.lower().replace('_', '').replace('-', '').replace(' ', '')
         norm_attr = attribute.lower().replace('_', '').replace('-', '').replace(' ', '')
-        return norm_key == norm_attr
+
+        # Exact match
+        if norm_key == norm_attr:
+            return True
+
+        # Check plural forms (add/remove 's')
+        if norm_key == norm_attr + 's' or norm_key + 's' == norm_attr:
+            return True
+
+        # Check 'es' plural (e.g., address/addresses)
+        if norm_key == norm_attr + 'es' or norm_key + 'es' == norm_attr:
+            return True
+
+        return False
 
     def evaluate_page(
         self,
