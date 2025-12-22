@@ -124,8 +124,7 @@ class SWDEEvaluationRunner:
             "main.py",
             "-d", str(html_dir),
             "-o", str(output_dir),
-            "--domain", website,
-            "--skip-config-check"
+            "--domain", website
         ]
 
         print(f"Command: {' '.join(cmd)}")
