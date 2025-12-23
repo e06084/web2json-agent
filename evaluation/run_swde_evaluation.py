@@ -88,6 +88,15 @@ class SWDEEvaluationRunner:
             f"{vertical}-{website}",
         ]
 
+        # First try in the vertical subdirectory
+        vertical_dir = self.dataset_dir / vertical
+        if vertical_dir.exists():
+            for pattern in patterns:
+                matches = list(vertical_dir.glob(pattern))
+                if matches:
+                    return matches[0]
+
+        # Fallback: try in the root dataset directory
         for pattern in patterns:
             matches = list(self.dataset_dir.glob(pattern))
             if matches:
@@ -121,7 +130,7 @@ class SWDEEvaluationRunner:
         # Run the agent
         cmd = [
             self.python_cmd,
-            "main.py",
+            "-m", "web2json.main",
             "-d", str(html_dir),
             "-o", str(output_dir),
             "--domain", website
@@ -129,22 +138,21 @@ class SWDEEvaluationRunner:
 
         print(f"Command: {' '.join(cmd)}")
         print("Running agent (this may take a while)...")
+        print("-" * 80)
 
         try:
             result = subprocess.run(
                 cmd,
                 cwd=Path(__file__).parent.parent,
-                capture_output=True,
-                text=True,
                 timeout=3600  # 1 hour timeout
             )
 
+            print("-" * 80)
             if result.returncode != 0:
-                print(f"Error running agent:")
-                print(result.stderr)
+                print(f"Error running agent (return code {result.returncode})")
                 raise RuntimeError(f"Agent failed with return code {result.returncode}")
 
-            print("Agent completed successfully!")
+            print("✅ Agent completed successfully!")
 
             # Return result directory
             result_dir = output_dir / "result"
@@ -293,10 +301,14 @@ class SWDEEvaluationRunner:
             json.dump(summary, f, indent=2)
 
         print(f"\nVertical summary saved to: {summary_file}")
-        print(f"\nAverage metrics for {vertical}:")
-        print(f"  Precision: {summary['average_metrics']['precision']:.2%}")
-        print(f"  Recall: {summary['average_metrics']['recall']:.2%}")
-        print(f"  F1 Score: {summary['average_metrics']['f1']:.2%}")
+
+        if 'average_metrics' in summary:
+            print(f"\nAverage metrics for {vertical}:")
+            print(f"  Precision: {summary['average_metrics']['precision']:.2%}")
+            print(f"  Recall: {summary['average_metrics']['recall']:.2%}")
+            print(f"  F1 Score: {summary['average_metrics']['f1']:.2%}")
+        else:
+            print(f"\nNo successful evaluations for {vertical} - cannot compute average metrics")
 
 
 def main():

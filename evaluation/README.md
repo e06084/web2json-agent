@@ -160,7 +160,7 @@ Modify `visualization.py` to change report format or add new visualizations.
 ## Troubleshooting
 
 **Agent fails to run:**
-- Check that main.py is in the parent directory
+- Check that web2json package is properly installed (`pip install -e .`)
 - Verify Python dependencies are installed
 - Check logs in the output directory
 
