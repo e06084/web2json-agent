@@ -53,7 +53,11 @@ class SWDEEvaluationRunner:
         dataset_dir: str,
         groundtruth_dir: str,
         output_root: str,
-        python_cmd: str = "python3"
+        python_cmd: str = "python3",
+        resume: bool = False,
+        skip_agent: bool = False,
+        skip_evaluation: bool = False,
+        force: bool = False
     ):
         """
         Initialize the evaluation runner.
@@ -63,13 +67,218 @@ class SWDEEvaluationRunner:
             groundtruth_dir: Directory containing groundtruth files
             output_root: Root directory for outputs
             python_cmd: Python command to use
+            resume: Whether to resume from existing results (skip already completed)
+            skip_agent: Skip agent execution if output already exists
+            skip_evaluation: Skip evaluation if report already exists
+            force: Force re-run everything (overrides resume/skip options)
         """
         self.dataset_dir = Path(dataset_dir)
         self.groundtruth_dir = Path(groundtruth_dir)
         self.output_root = Path(output_root)
         self.python_cmd = python_cmd
+        self.resume = resume and not force
+        self.skip_agent = skip_agent and not force
+        self.skip_evaluation = skip_evaluation and not force
+        self.force = force
 
         self.output_root.mkdir(parents=True, exist_ok=True)
+
+        # Global summary file path
+        self.global_summary_file = self.output_root / "summary.json"
+
+        # Load or initialize global summary
+        self.global_summary = self._load_global_summary()
+
+    def _load_global_summary(self) -> Dict:
+        """Load or initialize the global summary."""
+        if self.global_summary_file.exists():
+            with open(self.global_summary_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        else:
+            return {
+                'timestamp': datetime.now().isoformat(),
+                'verticals': {},
+                'overall': {
+                    'total_websites': 0,
+                    'completed_websites': 0,
+                    'precision': 0.0,
+                    'recall': 0.0,
+                    'f1': 0.0
+                }
+            }
+
+    def _save_global_summary(self) -> None:
+        """Save the global summary to file."""
+        with open(self.global_summary_file, 'w', encoding='utf-8') as f:
+            json.dump(self.global_summary, f, indent=2, ensure_ascii=False)
+        print(f"✅ Global summary updated: {self.global_summary_file}")
+
+    def _update_global_summary(self, vertical: str, website: str, results: Dict) -> None:
+        """
+        Update the global summary with new results.
+
+        Args:
+            vertical: Vertical name
+            website: Website name
+            results: Evaluation results
+        """
+        # Initialize vertical if not exists
+        if vertical not in self.global_summary['verticals']:
+            self.global_summary['verticals'][vertical] = {
+                'websites': {},
+                'metrics': {
+                    'precision': 0.0,
+                    'recall': 0.0,
+                    'f1': 0.0
+                },
+                'completed_websites': 0,
+                'total_websites': len(VERTICALS.get(vertical, []))
+            }
+
+        # Add website results
+        self.global_summary['verticals'][vertical]['websites'][website] = {
+            'timestamp': datetime.now().isoformat(),
+            'precision': results['overall_metrics']['precision'],
+            'recall': results['overall_metrics']['recall'],
+            'f1': results['overall_metrics']['f1'],
+            'evaluated_pages': results['statistics']['evaluated_pages'],
+            'errors': results['statistics']['errors'],
+            'attribute_metrics': results['attribute_metrics']
+        }
+
+        # Update vertical metrics (average across all completed websites)
+        vertical_data = self.global_summary['verticals'][vertical]
+        completed_sites = list(vertical_data['websites'].values())
+        if completed_sites:
+            vertical_data['metrics']['precision'] = sum(s['precision'] for s in completed_sites) / len(completed_sites)
+            vertical_data['metrics']['recall'] = sum(s['recall'] for s in completed_sites) / len(completed_sites)
+            vertical_data['metrics']['f1'] = sum(s['f1'] for s in completed_sites) / len(completed_sites)
+            vertical_data['completed_websites'] = len(completed_sites)
+
+        # Update overall metrics (weighted average across all websites in all verticals)
+        all_results = []
+        total_websites = 0
+        completed_websites = 0
+
+        for vert_name, vert_data in self.global_summary['verticals'].items():
+            total_websites += vert_data['total_websites']
+            for site_results in vert_data['websites'].values():
+                all_results.append(site_results)
+                completed_websites += 1
+
+        if all_results:
+            self.global_summary['overall']['precision'] = sum(r['precision'] for r in all_results) / len(all_results)
+            self.global_summary['overall']['recall'] = sum(r['recall'] for r in all_results) / len(all_results)
+            self.global_summary['overall']['f1'] = sum(r['f1'] for r in all_results) / len(all_results)
+            self.global_summary['overall']['completed_websites'] = completed_websites
+            self.global_summary['overall']['total_websites'] = total_websites
+
+        # Update timestamp
+        self.global_summary['timestamp'] = datetime.now().isoformat()
+
+        # Save to file
+        self._save_global_summary()
+
+    def _is_agent_completed(self, vertical: str, website: str) -> bool:
+        """
+        Check if agent has already generated results for a website.
+
+        Args:
+            vertical: Vertical name
+            website: Website name
+
+        Returns:
+            True if agent output exists, False otherwise
+        """
+        if not self.skip_agent:
+            return False
+
+        output_dir = self.output_root / vertical / website
+        result_dir = output_dir / "result"
+
+        # Check if result directory exists and has JSON files
+        if not result_dir.exists():
+            return False
+
+        json_files = list(result_dir.glob("*.json"))
+        if not json_files:
+            return False
+
+        print(f"  ✓ Agent output found: {len(json_files)} result files")
+        return True
+
+    def _is_evaluation_completed(self, vertical: str, website: str) -> bool:
+        """
+        Check if evaluation has already been completed for a website.
+
+        Args:
+            vertical: Vertical name
+            website: Website name
+
+        Returns:
+            True if evaluation report exists, False otherwise
+        """
+        if not self.skip_evaluation:
+            return False
+
+        eval_dir = self.output_root / vertical / website / "evaluation"
+        report_file = eval_dir / "evaluation_report.json"
+
+        if report_file.exists():
+            print(f"  ✓ Evaluation report found: {report_file}")
+            return True
+
+        return False
+
+    def _is_website_completed(self, vertical: str, website: str) -> bool:
+        """
+        Check if a website has already been fully evaluated.
+
+        Args:
+            vertical: Vertical name
+            website: Website name
+
+        Returns:
+            True if already completed, False otherwise
+        """
+        if not self.resume:
+            return False
+
+        # Check global summary
+        if vertical not in self.global_summary['verticals']:
+            return False
+
+        if website not in self.global_summary['verticals'][vertical]['websites']:
+            return False
+
+        # Also verify the files actually exist
+        output_dir = self.output_root / vertical / website
+        result_dir = output_dir / "result"
+        eval_dir = output_dir / "evaluation"
+
+        has_results = result_dir.exists() and list(result_dir.glob("*.json"))
+        has_eval = (eval_dir / "evaluation_report.json").exists()
+
+        if has_results and has_eval:
+            print(f"  ✓ Found existing results and evaluation")
+            return True
+        else:
+            print(f"  ⚠ Entry in summary but missing files (will re-run)")
+            return False
+
+    def _print_progress(self) -> None:
+        """Print current overall progress and metrics."""
+        overall = self.global_summary['overall']
+        print(f"\n{'='*80}")
+        print(f"📊 OVERALL PROGRESS")
+        print(f"{'='*80}")
+        print(f"Progress: {overall['completed_websites']}/{overall['total_websites']} websites completed")
+        if overall['completed_websites'] > 0:
+            print(f"Current Overall Metrics:")
+            print(f"  Precision: {overall['precision']:.2%}")
+            print(f"  Recall:    {overall['recall']:.2%}")
+            print(f"  F1 Score:  {overall['f1']:.2%}")
+        print(f"{'='*80}\n")
 
     def get_html_directory(self, vertical: str, website: str) -> Path:
         """
@@ -88,6 +297,15 @@ class SWDEEvaluationRunner:
             f"{vertical}-{website}",
         ]
 
+        # First try in the vertical subdirectory
+        vertical_dir = self.dataset_dir / vertical
+        if vertical_dir.exists():
+            for pattern in patterns:
+                matches = list(vertical_dir.glob(pattern))
+                if matches:
+                    return matches[0]
+
+        # Fallback: try in the root dataset directory
         for pattern in patterns:
             matches = list(self.dataset_dir.glob(pattern))
             if matches:
@@ -121,7 +339,7 @@ class SWDEEvaluationRunner:
         # Run the agent
         cmd = [
             self.python_cmd,
-            "main.py",
+            "-m", "web2json.main",
             "-d", str(html_dir),
             "-o", str(output_dir),
             "--domain", website
@@ -129,22 +347,21 @@ class SWDEEvaluationRunner:
 
         print(f"Command: {' '.join(cmd)}")
         print("Running agent (this may take a while)...")
+        print("-" * 80)
 
         try:
             result = subprocess.run(
                 cmd,
                 cwd=Path(__file__).parent.parent,
-                capture_output=True,
-                text=True,
                 timeout=3600  # 1 hour timeout
             )
 
+            print("-" * 80)
             if result.returncode != 0:
-                print(f"Error running agent:")
-                print(result.stderr)
+                print(f"Error running agent (return code {result.returncode})")
                 raise RuntimeError(f"Agent failed with return code {result.returncode}")
 
-            print("Agent completed successfully!")
+            print("✅ Agent completed successfully!")
 
             # Return result directory
             result_dir = output_dir / "result"
@@ -205,14 +422,48 @@ class SWDEEvaluationRunner:
         Returns:
             Evaluation results
         """
-        # Run agent
-        agent_output_dir = self.run_agent(vertical, website)
+        print(f"\n{'='*80}")
+        print(f"Processing: {vertical}/{website}")
+        print(f"{'='*80}")
 
-        # Evaluate
-        results = self.evaluate_website(vertical, website, agent_output_dir)
+        # Check if already completed (resume mode)
+        if self._is_website_completed(vertical, website):
+            print(f"⏭️  Skipping {vertical}/{website} - already completed (resume mode)")
+            # Return existing results from global summary
+            return self.global_summary['verticals'][vertical]['websites'][website]
 
-        # Generate reports
-        self.generate_reports(vertical, website, results)
+        # Check if agent output already exists
+        skip_agent = self._is_agent_completed(vertical, website)
+
+        # Run agent if needed
+        if skip_agent:
+            print(f"⏭️  Skipping agent execution - using existing output")
+            output_dir = self.output_root / vertical / website
+            agent_output_dir = output_dir / "result"
+        else:
+            agent_output_dir = self.run_agent(vertical, website)
+
+        # Check if evaluation already exists
+        skip_evaluation = self._is_evaluation_completed(vertical, website)
+
+        # Evaluate if needed
+        if skip_evaluation:
+            print(f"⏭️  Skipping evaluation - using existing report")
+            # Load existing evaluation results
+            eval_dir = self.output_root / vertical / website / "evaluation"
+            report_file = eval_dir / "evaluation_report.json"
+            with open(report_file, 'r', encoding='utf-8') as f:
+                results = json.load(f)
+        else:
+            results = self.evaluate_website(vertical, website, agent_output_dir)
+            # Generate reports
+            self.generate_reports(vertical, website, results)
+
+        # Update global summary (always update to ensure consistency)
+        self._update_global_summary(vertical, website, results)
+
+        # Print current overall progress
+        self._print_progress()
 
         return results
 
@@ -293,10 +544,14 @@ class SWDEEvaluationRunner:
             json.dump(summary, f, indent=2)
 
         print(f"\nVertical summary saved to: {summary_file}")
-        print(f"\nAverage metrics for {vertical}:")
-        print(f"  Precision: {summary['average_metrics']['precision']:.2%}")
-        print(f"  Recall: {summary['average_metrics']['recall']:.2%}")
-        print(f"  F1 Score: {summary['average_metrics']['f1']:.2%}")
+
+        if 'average_metrics' in summary:
+            print(f"\nAverage metrics for {vertical}:")
+            print(f"  Precision: {summary['average_metrics']['precision']:.2%}")
+            print(f"  Recall: {summary['average_metrics']['recall']:.2%}")
+            print(f"  F1 Score: {summary['average_metrics']['f1']:.2%}")
+        else:
+            print(f"\nNo successful evaluations for {vertical} - cannot compute average metrics")
 
 
 def main():
@@ -313,6 +568,14 @@ def main():
                        help='Specific website to evaluate (requires --vertical)')
     parser.add_argument('--python', type=str, default='python3',
                        help='Python command to use (default: python3)')
+    parser.add_argument('--resume', action='store_true',
+                       help='Resume from previous run (skip fully completed websites)')
+    parser.add_argument('--skip-agent', action='store_true',
+                       help='Skip agent execution if output already exists')
+    parser.add_argument('--skip-evaluation', action='store_true',
+                       help='Skip evaluation if report already exists')
+    parser.add_argument('--force', action='store_true',
+                       help='Force re-run everything (overrides resume/skip options)')
 
     args = parser.parse_args()
 
@@ -325,7 +588,11 @@ def main():
         dataset_dir=args.dataset_dir,
         groundtruth_dir=args.groundtruth_dir,
         output_root=args.output_dir,
-        python_cmd=args.python
+        python_cmd=args.python,
+        resume=args.resume,
+        skip_agent=args.skip_agent,
+        skip_evaluation=args.skip_evaluation,
+        force=args.force
     )
 
     # Run evaluation
@@ -337,6 +604,16 @@ def main():
         runner.run_vertical(args.vertical)
     else:
         # All verticals
+        print(f"\n{'#'*80}")
+        print(f"# RUNNING FULL SWDE EVALUATION")
+        print(f"# Total verticals: {len(VERTICALS)}")
+        print(f"# Total websites: {sum(len(sites) for sites in VERTICALS.values())}")
+        print(f"# Resume mode: {'ON' if args.resume else 'OFF'}")
+        print(f"# Skip agent: {'ON' if args.skip_agent else 'OFF'}")
+        print(f"# Skip evaluation: {'ON' if args.skip_evaluation else 'OFF'}")
+        print(f"# Force mode: {'ON' if args.force else 'OFF'}")
+        print(f"{'#'*80}\n")
+
         for vertical in VERTICALS.keys():
             print(f"\n{'#'*80}")
             print(f"# Processing vertical: {vertical}")
@@ -347,6 +624,14 @@ def main():
                 print(f"Error processing vertical {vertical}: {e}")
                 import traceback
                 traceback.print_exc()
+
+        # Print final summary
+        print(f"\n{'#'*80}")
+        print(f"# EVALUATION COMPLETE!")
+        print(f"{'#'*80}")
+        runner._print_progress()
+        print(f"\nGlobal summary saved to: {runner.global_summary_file}")
+
 
 
 if __name__ == '__main__':

@@ -39,38 +39,91 @@ class SWDEEvaluator:
             print(f"Error loading {output_file}: {e}")
             return None
 
-    def extract_values_from_json(self, json_data: Dict[str, Any], attribute: str) -> List[str]:
+    def extract_all_values_from_json(self, json_data: Dict[str, Any]) -> List[str]:
         """
-        Extract values for a specific attribute from JSON data.
-        Searches recursively through the JSON structure.
+        Extract ALL values from JSON data (regardless of keys).
+        Recursively traverses the entire JSON structure and collects all string/numeric values.
 
         Args:
             json_data: Parsed JSON data
-            attribute: Attribute name to search for
 
         Returns:
-            List of values found
+            List of all values found in the JSON
         """
         values = []
 
-        def search_dict(obj, key):
-            """Recursively search for key in nested dict/list."""
+        def collect_values(obj):
+            """Recursively collect all values from nested dict/list."""
             if isinstance(obj, dict):
-                for k, v in obj.items():
-                    # Check if key matches (case-insensitive, allowing underscores/hyphens)
-                    if self._key_matches(k, key):
-                        if isinstance(v, list):
-                            values.extend([str(item) for item in v if item])
-                        elif v is not None:
-                            values.append(str(v))
-                    # Continue searching recursively
-                    search_dict(v, key)
+                for v in obj.values():
+                    collect_values(v)
             elif isinstance(obj, list):
                 for item in obj:
-                    search_dict(item, key)
+                    collect_values(item)
+            elif obj is not None:
+                # Convert to string and add to values list
+                str_val = str(obj).strip()
+                if str_val:  # Only add non-empty values
+                    values.append(str_val)
 
-        search_dict(json_data, attribute)
+        collect_values(json_data)
         return values
+
+    def extract_matching_values(self, json_data: Dict[str, Any], groundtruth_values: List[str]) -> List[str]:
+        """
+        Extract values from JSON that match any of the groundtruth values.
+        Uses value-based matching instead of key-based matching.
+
+        Args:
+            json_data: Parsed JSON data
+            groundtruth_values: List of groundtruth values to search for
+
+        Returns:
+            List of unique values from JSON that match groundtruth (for precision calculation)
+        """
+        # Extract all values from JSON
+        all_json_values = self.extract_all_values_from_json(json_data)
+
+        # Find which JSON values match any groundtruth value
+        from .metrics import ExtractionMetrics
+        matching_values = []
+        seen_values = set()  # Track seen values to avoid duplicates
+
+        for json_val in all_json_values:
+            # Normalize value for duplicate detection
+            normalized = ExtractionMetrics.normalize_value(json_val)
+
+            # Skip if we've already seen this value
+            if normalized in seen_values:
+                continue
+
+            # Check if this value matches any groundtruth
+            for gt_val in groundtruth_values:
+                if ExtractionMetrics.value_match(json_val, gt_val):
+                    matching_values.append(json_val)
+                    seen_values.add(normalized)
+                    break  # Don't check other groundtruth values
+
+        return matching_values
+
+    def extract_values_from_json(self, json_data: Dict[str, Any], attribute: str) -> List[str]:
+        """
+        Extract values for a specific attribute from JSON data.
+        Uses VALUE-BASED matching instead of KEY-BASED matching.
+
+        This method is now a placeholder - actual matching is done in evaluate_page()
+        to avoid circular dependency with groundtruth values.
+
+        Args:
+            json_data: Parsed JSON data
+            attribute: Attribute name (not used in value-based matching)
+
+        Returns:
+            Empty list (actual extraction happens in evaluate_page)
+        """
+        # Return empty list - we'll do the matching in evaluate_page
+        # where we have access to groundtruth values
+        return []
 
     def _key_matches(self, json_key: str, attribute: str) -> bool:
         """
@@ -109,7 +162,7 @@ class SWDEEvaluator:
         agent_output: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Evaluate a single page.
+        Evaluate a single page using value-based matching.
 
         Args:
             vertical: Vertical name
@@ -128,8 +181,8 @@ class SWDEEvaluator:
             # Get groundtruth
             gt_values = self.gt_loader.get_groundtruth(vertical, website, page_id, attribute)
 
-            # Extract from agent output
-            extracted_values = self.extract_values_from_json(agent_output, attribute)
+            # Extract matching values from agent output (value-based matching)
+            extracted_values = self.extract_matching_values(agent_output, gt_values)
 
             # Compute metrics
             metrics = self.metrics_computer.compute_field_metrics(extracted_values, gt_values)
