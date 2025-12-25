@@ -332,8 +332,21 @@ def enrich_schema_with_xpath(schema_template: Dict, html_content: str) -> Dict:
         prompt = SchemaExtractionPrompts.get_schema_enrichment_prompt()
 
         # 2. 构建消息
-        schema_str = json.dumps(schema_template, ensure_ascii=False, indent=2)
+        # 确保中文字段名正确序列化
+        try:
+            schema_str = json.dumps(schema_template, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"JSON序列化失败，尝试使用ASCII模式: {e}")
+            schema_str = json.dumps(schema_template, ensure_ascii=True, indent=2)
+
         user_message = f"{prompt}\n\n## Schema模板\n\n```json\n{schema_str}\n```\n\n## HTML内容\n\n```html\n{html_content[:50000]}\n```"
+
+        # 确保消息内容是有效的UTF-8字符串
+        try:
+            # 清理可能存在的替代字符（surrogate characters）
+            user_message = user_message.encode('utf-8', errors='replace').decode('utf-8')
+        except Exception as e:
+            logger.warning(f"消息编码处理失败: {e}")
 
         # 3. 调用LLM
         model = ChatOpenAI(
