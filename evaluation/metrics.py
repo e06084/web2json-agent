@@ -14,14 +14,15 @@ class ExtractionMetrics:
     @staticmethod
     def normalize_value(value: str) -> str:
         """
-        Normalize a value for comparison.
+        Normalize a value for comparison (SWDE standard).
 
         This function:
-        1. Removes ALL whitespace (spaces, tabs, newlines)
-        2. Converts to lowercase
-        3. Strips leading/trailing whitespace
+        1. Decodes HTML entities (&lt;, &gt;, &amp;, etc.)
+        2. Removes ALL whitespace (spaces, tabs, newlines)
+        3. Converts to lowercase
+        4. Strips leading/trailing whitespace
 
-        This ensures values like "$ 24,250" and "$24,250" are treated as equal.
+        This follows the SWDE standard normalization approach.
 
         Args:
             value: Raw value string
@@ -31,21 +32,51 @@ class ExtractionMetrics:
         """
         if value is None:
             return ""
-        # Remove ALL whitespace and convert to lowercase
-        # This handles cases like "$ 24,250" vs "$24,250"
-        return ''.join(str(value).split()).strip().lower()
+
+        text = str(value)
+
+        # HTML entity decoding (SWDE standard)
+        text = text.replace('&lt;', '<')
+        text = text.replace('&gt;', '>')
+        text = text.replace('&amp;', '&')
+        text = text.replace('&quot;', '"')
+        text = text.replace('&#39;', "'").replace('&apos;', "'")
+        text = text.replace('&#150;', '\u2013')  # en dash
+        text = text.replace('&nbsp;', ' ')
+        text = text.replace('&#160;', ' ')
+        text = text.replace('&#039;', "'")
+        text = text.replace('&#34;', '"')
+        text = text.replace('&reg;', '\u00ae')  # registered symbol
+        text = text.replace('&rsquo;', '\u2019')  # right single quote
+        text = text.replace('&#8226;', '\u2022')  # bullet
+        text = text.replace('&ndash;', '\u2013')  # en dash
+        text = text.replace('&#x27;', "'")
+        text = text.replace('&#40;', '(')
+        text = text.replace('&#41;', ')')
+        text = text.replace('&#47;','/')
+        text = text.replace('&#43;','+')
+        text = text.replace('&#035;','#')
+        text = text.replace('&#38;', '&')
+        text = text.replace('&eacute;', '\u00e9')  # e with acute
+        text = text.replace('&frac12;', '\u00bd')  # 1/2
+        text = text.replace('  ', ' ')
+
+        # Remove ALL whitespace using regex (SWDE standard)
+        import re
+        text = re.sub(r"\s+", "", text)
+
+        return text.strip().lower()
 
     @staticmethod
     def value_match(extracted: str, groundtruth: str) -> bool:
         """
-        Check if extracted value matches groundtruth using field value matching.
+        Check if extracted value matches groundtruth using exact matching (SWDE standard).
 
-        Matching strategy (in order of priority):
-        1. Exact match: normalized values are identical
-        2. Substring match: groundtruth is contained in extracted value
-        3. Reverse substring match: extracted is contained in groundtruth
+        Matching strategy:
+        - Exact match: normalized values are identical
 
-        This ensures flexible matching while maintaining accuracy.
+        This follows the SWDE standard evaluation approach which uses
+        set-based exact matching after normalization.
 
         Args:
             extracted: Extracted value from parser
@@ -63,78 +94,55 @@ class ExtractionMetrics:
         if not norm_extracted or not norm_groundtruth:
             return False
 
-        # Strategy 1: Exact match (most reliable)
-        if norm_extracted == norm_groundtruth:
-            return True
-
-        # Strategy 2: Groundtruth is substring of extracted
-        # Example: GT="iPhone 13" in Extracted="iPhone 13 Pro Max"
-        if norm_groundtruth in norm_extracted:
-            return True
-
-        # Strategy 3: Extracted is substring of groundtruth
-        # Example: Extracted="2010" in GT="2010 Edition"
-        if norm_extracted in norm_groundtruth:
-            return True
-
-        return False
+        # SWDE standard: Exact match only
+        return norm_extracted == norm_groundtruth
 
     @staticmethod
     def compute_field_metrics(extracted_values: List[str], groundtruth_values: List[str]) -> Dict[str, float]:
         """
-        Compute metrics for a single field.
+        Compute metrics for a single field using set-based matching (SWDE standard).
+
+        Uses set operations after normalization:
+        - TP = |pred ∩ gt| (intersection)
+        - FP = |pred - gt| (predicted but not in groundtruth)
+        - FN = |gt - pred| (in groundtruth but not predicted)
 
         Args:
             extracted_values: List of extracted values
             groundtruth_values: List of groundtruth values
 
         Returns:
-            Dictionary with precision, recall, and F1 score
+            Dictionary with precision, recall, F1 score, and counts
         """
-        if not groundtruth_values:
-            # No groundtruth values - if we extracted nothing, that's correct
-            precision = 1.0 if not extracted_values else 0.0
-            recall = 1.0
-            f1 = 1.0 if precision == 1.0 else 0.0
-            return {
-                'precision': precision,
-                'recall': recall,
-                'f1': f1,
-                'true_positives': 0,
-                'false_positives': len(extracted_values),
-                'false_negatives': 0,
-                'extracted_count': len(extracted_values),
-                'groundtruth_count': 0
-            }
+        # Normalize all values and convert to sets
+        def normalize_list(values):
+            """Normalize and deduplicate values."""
+            normalized = [ExtractionMetrics.normalize_value(v) for v in values]
+            # Filter out empty strings and return as set
+            return set(v for v in normalized if v)
 
-        # Find matches
-        true_positives = 0
-        matched_gt = set()
+        pred_set = normalize_list(extracted_values)
+        gt_set = normalize_list(groundtruth_values)
 
-        for ext_val in extracted_values:
-            for i, gt_val in enumerate(groundtruth_values):
-                if i not in matched_gt and ExtractionMetrics.value_match(ext_val, gt_val):
-                    true_positives += 1
-                    matched_gt.add(i)
-                    break
-
-        false_positives = len(extracted_values) - true_positives
-        false_negatives = len(groundtruth_values) - true_positives
+        # SWDE standard: Set-based operations
+        tp = len(pred_set & gt_set)  # Intersection
+        fp = len(pred_set - gt_set)  # Predicted but not in GT
+        fn = len(gt_set - pred_set)  # In GT but not predicted
 
         # Calculate metrics
-        precision = true_positives / len(extracted_values) if extracted_values else 0.0
-        recall = true_positives / len(groundtruth_values) if groundtruth_values else 0.0
-        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        precision = (tp + 1e-12) / (tp + fp + 1e-12)
+        recall = (tp + 1e-12) / (tp + fn + 1e-12)
+        f1 = (2 * precision * recall) / (precision + recall + 1e-12)
 
         return {
             'precision': precision,
             'recall': recall,
             'f1': f1,
-            'true_positives': true_positives,
-            'false_positives': false_positives,
-            'false_negatives': false_negatives,
-            'extracted_count': len(extracted_values),
-            'groundtruth_count': len(groundtruth_values)
+            'true_positives': tp,
+            'false_positives': fp,
+            'false_negatives': fn,
+            'extracted_count': len(pred_set),
+            'groundtruth_count': len(gt_set)
         }
 
     @staticmethod

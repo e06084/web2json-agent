@@ -84,6 +84,19 @@ class Settings(BaseModel):
         attr.strip() for attr in os.getenv("HTML_KEEP_ATTRS", "class,id,href,src,data-id").split(",")
     ])
 
+    # ============================================
+    # SWDE 评估配置
+    # ============================================
+    swde_dataset_dir: str = Field(default_factory=lambda: os.getenv("SWDE_DATASET_DIR", "evaluationSet"))
+    swde_groundtruth_dir: str = Field(default_factory=lambda: os.getenv("SWDE_GROUNDTRUTH_DIR", "evaluationSet/groundtruth"))
+    swde_output_dir: str = Field(default_factory=lambda: os.getenv("SWDE_OUTPUT_DIR", "output/swde_results"))
+    swde_python_cmd: str = Field(default_factory=lambda: os.getenv("SWDE_PYTHON_CMD", "python3"))
+    swde_use_predefined_schema: bool = Field(default_factory=lambda: os.getenv("SWDE_USE_PREDEFINED_SCHEMA", "false").lower() in ("true", "1", "yes"))
+    swde_resume: bool = Field(default_factory=lambda: os.getenv("SWDE_RESUME", "false").lower() in ("true", "1", "yes"))
+    swde_skip_agent: bool = Field(default_factory=lambda: os.getenv("SWDE_SKIP_AGENT", "false").lower() in ("true", "1", "yes"))
+    swde_skip_evaluation: bool = Field(default_factory=lambda: os.getenv("SWDE_SKIP_EVALUATION", "false").lower() in ("true", "1", "yes"))
+    swde_force: bool = Field(default_factory=lambda: os.getenv("SWDE_FORCE", "false").lower() in ("true", "1", "yes"))
+
     class Config:
         """Pydantic配置"""
         env_file = ".env"

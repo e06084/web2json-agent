@@ -14,12 +14,19 @@ import json
 from datetime import datetime
 from tqdm import tqdm
 
+# Force change working directory to project root (fix IDE working directory issue)
+project_root = Path(__file__).parent.parent
+if Path.cwd() != project_root:
+    print(f"⚠️  Warning: Changing working directory from {Path.cwd()} to {project_root}")
+    os.chdir(project_root)
+
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from evaluation.evaluator import SWDEEvaluator
 from evaluation.visualization import EvaluationReporter
 from evaluation.schema_generator import SchemaGenerator
+from web2json.config.settings import settings
 
 
 # SWDE dataset configuration
@@ -344,7 +351,8 @@ class SWDEEvaluationRunner:
             if matches:
                 return matches[0]
 
-        raise FileNotFoundError(f"HTML directory not found for {vertical}/{website}")
+        # Return None instead of raising exception (website may not exist in dataset)
+        return None
 
     def run_agent(self, vertical: str, website: str) -> Path:
         """
@@ -367,6 +375,9 @@ class SWDEEvaluationRunner:
 
         # Get HTML directory
         html_dir = self.get_html_directory(vertical, website)
+        if html_dir is None:
+            print(f"⊘ Skipping {vertical}/{website}: HTML directory not found in dataset")
+            raise FileNotFoundError(f"HTML directory not found for {vertical}/{website}")
         print(f"HTML directory: {html_dir}")
 
         # Create output directory
@@ -589,8 +600,11 @@ class SWDEEvaluationRunner:
             try:
                 results = self.run_single_website(vertical, website)
                 all_results.append(results)
+            except FileNotFoundError as e:
+                # Website not in dataset - skip silently
+                print(f"⊘ Skipped {vertical}/{website}: {e}")
             except Exception as e:
-                print(f"Error processing {vertical}/{website}: {e}")
+                print(f"✗ Error processing {vertical}/{website}: {e}")
                 import traceback
                 traceback.print_exc()
 
@@ -657,31 +671,62 @@ class SWDEEvaluationRunner:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Run SWDE evaluation for web2json-agent')
-    parser.add_argument('--dataset-dir', type=str, required=True,
-                       help='Root directory of SWDE dataset')
-    parser.add_argument('--groundtruth-dir', type=str, required=True,
-                       help='Directory containing groundtruth files')
-    parser.add_argument('--output-dir', type=str, required=True,
-                       help='Root directory for outputs')
+    parser = argparse.ArgumentParser(
+        description='Run SWDE evaluation for web2json-agent',
+        epilog='All options can be configured in .env file. Command line arguments override .env settings.'
+    )
+    parser.add_argument('--dataset-dir', type=str, default=settings.swde_dataset_dir,
+                       help=f'Root directory of SWDE dataset (default: {settings.swde_dataset_dir})')
+    parser.add_argument('--groundtruth-dir', type=str, default=settings.swde_groundtruth_dir,
+                       help=f'Directory containing groundtruth files (default: {settings.swde_groundtruth_dir})')
+    parser.add_argument('--output-dir', type=str, default=settings.swde_output_dir,
+                       help=f'Root directory for outputs (default: {settings.swde_output_dir})')
     parser.add_argument('--vertical', type=str, choices=list(VERTICALS.keys()),
                        help='Vertical to evaluate (if not specified, evaluate all)')
     parser.add_argument('--website', type=str,
                        help='Specific website to evaluate (requires --vertical)')
-    parser.add_argument('--python', type=str, default='python3',
-                       help='Python command to use (default: python3)')
-    parser.add_argument('--resume', action='store_true',
-                       help='Resume from previous run (skip fully completed websites)')
-    parser.add_argument('--skip-agent', action='store_true',
-                       help='Skip agent execution if output already exists')
-    parser.add_argument('--skip-evaluation', action='store_true',
-                       help='Skip evaluation if report already exists')
-    parser.add_argument('--force', action='store_true',
-                       help='Force re-run everything (overrides resume/skip options)')
-    parser.add_argument('--use-predefined-schema', action='store_true',
-                       help='Use predefined schema templates generated from groundtruth')
+    parser.add_argument('--python', type=str, default=settings.swde_python_cmd,
+                       help=f'Python command to use (default: {settings.swde_python_cmd})')
+    parser.add_argument('--resume', action='store_true', default=settings.swde_resume,
+                       help=f'Resume from previous run (default: {settings.swde_resume})')
+    parser.add_argument('--skip-agent', action='store_true', default=settings.swde_skip_agent,
+                       help=f'Skip agent execution if output already exists (default: {settings.swde_skip_agent})')
+    parser.add_argument('--skip-evaluation', action='store_true', default=settings.swde_skip_evaluation,
+                       help=f'Skip evaluation if report already exists (default: {settings.swde_skip_evaluation})')
+    parser.add_argument('--force', action='store_true', default=settings.swde_force,
+                       help=f'Force re-run everything (default: {settings.swde_force})')
+    parser.add_argument('--use-predefined-schema', action='store_true', default=settings.swde_use_predefined_schema,
+                       help=f'Use predefined schema templates generated from groundtruth (default: {settings.swde_use_predefined_schema})')
 
     args = parser.parse_args()
+
+    # Print diagnostic info
+    print(f"\n{'='*80}")
+    print(f"🔍 Diagnostic Information")
+    print(f"{'='*80}")
+    print(f"Current working directory: {Path.cwd()}")
+    print(f"Script file location:      {Path(__file__).resolve()}")
+    print(f"Project root (expected):   {Path(__file__).parent.parent}")
+    print(f"{'='*80}\n")
+
+    # Print configuration
+    print(f"\n{'='*80}")
+    print(f"SWDE Evaluation Configuration")
+    print(f"{'='*80}")
+    print(f"Dataset directory:       {args.dataset_dir}")
+    print(f"Groundtruth directory:   {args.groundtruth_dir}")
+    print(f"Output directory:        {args.output_dir}")
+    print(f"Python command:          {args.python}")
+    print(f"Use predefined schema:   {args.use_predefined_schema}")
+    print(f"Resume mode:             {args.resume}")
+    print(f"Skip agent:              {args.skip_agent}")
+    print(f"Skip evaluation:         {args.skip_evaluation}")
+    print(f"Force mode:              {args.force}")
+    if args.vertical:
+        print(f"Target vertical:         {args.vertical}")
+    if args.website:
+        print(f"Target website:          {args.website}")
+    print(f"{'='*80}\n")
 
     # Validate arguments
     if args.website and not args.vertical:

@@ -165,5 +165,29 @@ MIT License
 
 ---
 
+## 📊 SWDE 数据集评测
+
+项目使用 SWDE (Structured Web Data Extraction) 标准数据集进行评测，评测逻辑完全遵循 SWDE 标准：
+
+### 评测标准
+
+1. **归一化方式**
+   - HTML 实体解码 (`&lt;`, `&amp;`, `&nbsp;` 等)
+   - 移除所有空白字符
+   - 转换为小写
+
+2. **匹配策略**
+   - 使用精确匹配（exact match）
+   - 基于集合操作计算指标
+
+3. **指标计算**
+   - TP (True Positive) = |预测集合 ∩ 真值集合|
+   - FP (False Positive) = |预测集合 - 真值集合|
+   - FN (False Negative) = |真值集合 - 预测集合|
+   - Precision = TP / (TP + FP)
+   - Recall = TP / (TP + FN)
+   - F1 = 2 × Precision × Recall / (Precision + Recall)
+---
+
 **最后更新**: 2025-12-25
 **版本**: 1.1.0

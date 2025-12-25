@@ -241,6 +241,7 @@ class SchemaExtractionPrompts:
 ## 注意事项
 
 - **必须保持用户定义的所有字段key、type、description不变**
+- **一个字段可能对应多个xpath，务必选择有实际值的xpath**
 - value_sample应该是从HTML中实际提取的值，而不是编造的
 - 对于过长的文本，只截取前50个字符作为示例
 - 如果某个字段在HTML中不存在，保留该字段但xpath为空
