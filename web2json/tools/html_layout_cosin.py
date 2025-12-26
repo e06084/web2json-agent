@@ -366,6 +366,48 @@ def similarity(feature1: Dict, feature2: Dict, layer_n=5, k=0.7) -> float:
     attr_sim = cosine_similarity(attr_vecs)[0][1]
     return round(tag_sim * k + attr_sim * (1 - k), 8)
 
+
+def fuse_features(features: List[Dict], layer_n=5, k=0.7) -> np.ndarray:
+    """计算融合特征向量
+    Args:
+        features: List[Dict]
+        [
+            {
+                "tags": {1: ["<body>/div"], 2: [...]},
+                "attrs": {1: ["nav", "content", "footer"], 2: [...]}
+            },
+            {...}
+        ]
+        layer_n: 相似度计算DOM树层级深度，默认为5
+        k: tags 和 attrs 权重占比，k 表示 tags 权重，(1-k) 为 attrs 权重，默认 0.7:0.3
+    Return:
+        np.ndarray: 每个 feature 对应一条融合后的向量
+    """
+    if not features:
+        return np.empty((0, 0), dtype=np.float32)
+
+    fused_dicts = []
+    for feature in features:
+        tags_dict = __simp_tags(feature.get('tags', {}), layer_n)
+        attrs_dict = __simp_tags(feature.get('attrs', {}), layer_n)
+
+        combined = {}
+        # tag 维度加权
+        for key, value in tags_dict.items():
+            combined[f't:{key}'] = float(value) * float(k)
+
+        # attr 维度加权
+        if attrs_dict:
+            attr_weight = 1.0 - float(k)
+            for key, value in attrs_dict.items():
+                combined[f'a:{key}'] = float(value) * attr_weight
+
+        fused_dicts.append(combined)
+
+    # 统一做一次向量化，保证在同一特征空间
+    return __parse_vectors(fused_dicts)
+
+
 def __get_max_width_layer(tags):
     max_length = 0
     max_width_layer = 0

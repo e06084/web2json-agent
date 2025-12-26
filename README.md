@@ -159,6 +159,57 @@ web2json -d html_samples/ -o output/result --interactive-schema
 
 ---
 
+## 命令行工具使用
+
+### 上传文档 (`upload doc`)
+
+上传单个或多个文档供后续处理。
+
+**命令**:
+```bash
+web2json upload doc <file_path_or_directory>
+```
+
+**成功返回示例**:
+```json
+{
+  "code": 0,
+  "msg": "success",
+  "doc_id": "doc_4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c"
+}
+```
+
+### 查看文档列表 (`docs`)
+
+查看已上传的文档列表。
+
+**命令**:
+```bash
+web2json docs
+```
+
+**成功返回示例**:
+```json
+{
+  "code": 0,
+  "msg": "success",
+  "docs": [
+    {
+      "doc_id": "doc_4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c",
+      "doc_name": "example.html",
+      "created_at": "2025-12-23 17:30:00"
+    },
+    {
+      "doc_id": "doc_1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
+      "doc_name": "another_page.html",
+      "created_at": "2025-12-23 17:35:10"
+    }
+  ]
+}
+```
+
+---
+
 ## 📄 许可证
 
 MIT License
