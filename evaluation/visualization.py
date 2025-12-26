@@ -211,12 +211,30 @@ class EvaluationReporter:
             for attr, details in page_result['field_details'].items():
                 match_icon = "✓" if details['match'] else "✗"
                 match_class = "success" if details['match'] else "error"
+
+                # Get raw extracted values (from JSON keys)
+                raw_values = details.get('raw_extracted', [])
+                matched_values = details.get('extracted', [])
+                gt_values = details.get('groundtruth', [])
+
                 html_content += f"""
             <p><strong>{attr}:</strong> <span class="{match_class}">{match_icon}</span></p>
             <p style="margin-left: 20px;">
-                <strong>Groundtruth:</strong> {', '.join(details['groundtruth']) if details['groundtruth'] else '<em>None</em>'}<br>
-                <strong>Extracted:</strong> {', '.join(details['extracted']) if details['extracted'] else '<em>None</em>'}
-            </p>
+                <strong>Groundtruth:</strong> {', '.join(gt_values) if gt_values else '<em>None</em>'}<br>
+                <strong>JSON Value:</strong> {', '.join(raw_values) if raw_values else '<em>(not found in JSON)</em>'}<br>
+"""
+
+                # Show matched values if different from raw
+                if matched_values != raw_values:
+                    html_content += f"""                <strong>Matched Values:</strong> {', '.join(matched_values) if matched_values else '<em>(no match with groundtruth)</em>'}<br>
+"""
+
+                # Add explanation if no match
+                if not details['match'] and raw_values:
+                    html_content += f"""                <em style="color: #e74c3c;">⚠️ Extracted value does not match groundtruth (precision matching required)</em>
+"""
+
+                html_content += """            </p>
 """
             html_content += """
         </div>
@@ -298,8 +316,18 @@ class EvaluationReporter:
             results['overall_metrics']['f1']
         ]
         colors = ['#3498db', '#2ecc71', '#9b59b6']
-        ax2.pie(overall_data, labels=['Precision', 'Recall', 'F1'], autopct='%1.1f%%',
-                colors=colors, startangle=90)
+
+        # Handle edge case: all metrics are 0 (cannot draw pie chart with all zeros)
+        if all(x == 0 for x in overall_data):
+            ax2.text(0.5, 0.5, 'No Data\n(All metrics are 0)',
+                    ha='center', va='center', fontsize=14, color='red',
+                    transform=ax2.transAxes)
+            ax2.set_xlim(0, 1)
+            ax2.set_ylim(0, 1)
+            ax2.axis('off')
+        else:
+            ax2.pie(overall_data, labels=['Precision', 'Recall', 'F1'], autopct='%1.1f%%',
+                    colors=colors, startangle=90)
         ax2.set_title('Overall Performance')
 
         # 3. True Positives vs False Positives/Negatives

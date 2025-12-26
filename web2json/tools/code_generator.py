@@ -115,9 +115,9 @@ def generate_parser_code(
             json.dump(config, f, ensure_ascii=False, indent=2)
 
         if round_num == 1:
-            logger.success(f"代码生成完成: {parser_path}")
+            logger.success(f"代码生成完成")
         else:
-            logger.success(f"代码优化完成（第 {round_num} 轮）: {parser_path}")
+            logger.success(f"代码优化完成（第 {round_num} 轮）")
 
         return {
             'parser_path': str(parser_path),

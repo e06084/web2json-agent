@@ -626,9 +626,7 @@ class AgentExecutor:
                     logger.error(f"  ✗ Schema阶段第 {idx} 轮缺少HTML路径")
                     continue
 
-                logger.info(f"  [1/2] 复用Schema阶段的精简HTML: {html_path}")
-                if html_original_path:
-                    logger.debug(f"    原始HTML位置: {html_original_path}")
+                logger.info(f"  [1/2] 复用Schema阶段的精简HTML")
                 with open(html_path, 'r', encoding='utf-8') as f:
                     html_content = f.read()
                 logger.success(f"  ✓ 精简HTML已加载（长度: {len(html_content)} 字符）")
@@ -659,7 +657,6 @@ class AgentExecutor:
                 code_parser_path = self.parsers_dir / parser_filename
                 with open(code_parser_path, 'w', encoding='utf-8') as f:
                     f.write(parser_result['code'])
-                logger.success(f"  ✓ 解析器已保存: {code_parser_path}")
 
                 # 更新当前解析器
                 current_parser_code = parser_result['code']

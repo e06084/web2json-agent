@@ -154,6 +154,39 @@ class SWDEEvaluator:
 
         return False
 
+    def _extract_by_key(self, json_data: Dict[str, Any], attribute: str) -> List[str]:
+        """
+        Extract values from JSON by key matching (for display purposes).
+
+        Args:
+            json_data: Parsed JSON data
+            attribute: Attribute name to look for
+
+        Returns:
+            List of values found under matching keys
+        """
+        values = []
+
+        def extract_recursive(data, path=""):
+            if isinstance(data, dict):
+                for key, val in data.items():
+                    if self._key_matches(key, attribute):
+                        # Found matching key
+                        if isinstance(val, list):
+                            for item in val:
+                                if isinstance(item, (str, int, float)) and item:
+                                    values.append(str(item))
+                        elif isinstance(val, (str, int, float)) and val:
+                            values.append(str(val))
+                    # Continue recursion
+                    extract_recursive(val, f"{path}.{key}" if path else key)
+            elif isinstance(data, list):
+                for item in data:
+                    extract_recursive(item, path)
+
+        extract_recursive(json_data)
+        return values
+
     def evaluate_page(
         self,
         vertical: str,
@@ -181,6 +214,9 @@ class SWDEEvaluator:
             # Get groundtruth
             gt_values = self.gt_loader.get_groundtruth(vertical, website, page_id, attribute)
 
+            # Extract raw values from JSON based on key matching
+            raw_extracted = self._extract_by_key(agent_output, attribute)
+
             # Extract matching values from agent output (value-based matching)
             extracted_values = self.extract_matching_values(agent_output, gt_values)
 
@@ -188,10 +224,11 @@ class SWDEEvaluator:
             metrics = self.metrics_computer.compute_field_metrics(extracted_values, gt_values)
             field_metrics[attribute] = metrics
 
-            # Store details
+            # Store details (include both raw and matched values)
             field_details[attribute] = {
                 'groundtruth': gt_values,
-                'extracted': extracted_values,
+                'extracted': extracted_values,  # Values that matched groundtruth
+                'raw_extracted': raw_extracted,  # Raw values from JSON (by key)
                 'match': metrics['true_positives'] > 0
             }
 
