@@ -700,15 +700,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Print diagnostic info
-    print(f"\n{'='*80}")
-    print(f"🔍 Diagnostic Information")
-    print(f"{'='*80}")
-    print(f"Current working directory: {Path.cwd()}")
-    print(f"Script file location:      {Path(__file__).resolve()}")
-    print(f"Project root (expected):   {Path(__file__).parent.parent}")
-    print(f"{'='*80}\n")
-
     # Print configuration
     print(f"\n{'='*80}")
     print(f"SWDE Evaluation Configuration")
