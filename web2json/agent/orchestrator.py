@@ -97,8 +97,6 @@ class ParserAgent:
             if not self.schema_template:
                 raise ValueError("预定义模式需要提供schema_template参数")
 
-        logger.info("="*70)
-        logger.info("开始生成解析器")
         logger.info(f"Schema模式: {self.schema_mode}")
         logger.info("="*70)
 
